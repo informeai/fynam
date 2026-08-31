@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"log"
 	"sort"
+	"sync"
 
 	"fynam/internal/model"
 	"fynam/internal/storage"
+	"fynam/internal/updater"
 )
 
 // App reúne todos os métodos expostos ao frontend pelo Wails.
@@ -17,16 +20,29 @@ import (
 type App struct {
 	ctx   context.Context
 	store storage.Store
+
+	upd               *updater.Updater
+	mu                sync.Mutex
+	ultimaAtualizacao *updater.Atualizacao // resultado da última verificação
 }
 
 // NewApp cria a instância da aplicação com um Store já inicializado.
 func NewApp(store storage.Store) *App {
-	return &App{store: store}
+	app := &App{store: store}
+	if u, err := updater.New("informeai", "fynam", appVersion); err != nil {
+		log.Printf("auto-update desativado: %v", err)
+	} else {
+		app.upd = u
+	}
+	return app
 }
 
-// startup guarda o contexto do Wails (necessário para chamadas de runtime).
+// startup guarda o contexto do Wails e dispara a verificação de atualização.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	if updaterHabilitado && a.upd != nil {
+		go a.checarAtualizacaoNoInicio()
+	}
 }
 
 // c devolve um contexto utilizável mesmo antes do startup.

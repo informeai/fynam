@@ -1,0 +1,107 @@
+name: release
+
+# Publica uma GitHub Release com os binários de cada plataforma sempre que
+# uma tag "v*" é enviada. Os nomes dos assets seguem o padrão que o
+# internal/updater (go-selfupdate) espera, e um checksums.txt é gerado para
+# a validação SHA-256 no cliente.
+#
+# Fluxo de lançamento:
+#   1. bump em wails.json (info.productVersion) e commit
+#   2. git tag v0.3.0 && git push --tags
+#
+# O job ajusta wails.json a partir da tag antes de compilar, então a versão
+# embutida no binário sempre bate com a release.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            platform: darwin/universal
+            asset: fynam_darwin_universal.tar.gz
+          - os: windows-latest
+            platform: windows/amd64
+            asset: fynam_windows_amd64.zip
+          - os: ubuntu-latest
+            platform: linux/amd64
+            asset: fynam_linux_amd64.tar.gz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Dependências do Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Instalar Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.15.0
+
+      - name: Versão a partir da tag
+        shell: bash
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          echo "VERSION=$VER" >> "$GITHUB_ENV"
+          node -e "const f='wails.json';const j=require('./'+f);j.info=j.info||{};j.info.productVersion='$VER';require('fs').writeFileSync(f,JSON.stringify(j,null,2)+'\n')"
+          cat wails.json
+
+      - name: Build
+        run: wails build -platform ${{ matrix.platform }} -trimpath
+
+      - name: Empacotar (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          mkdir -p dist
+          tar -C "build/bin/fynam.app/Contents/MacOS" -czf "dist/${{ matrix.asset }}" fynam
+
+      - name: Empacotar (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          mkdir -p dist
+          tar -C build/bin -czf "dist/${{ matrix.asset }}" fynam
+
+      - name: Empacotar (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path build/bin/fynam.exe -DestinationPath "dist/${{ matrix.asset }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: checksums.txt
+        working-directory: dist
+        run: sha256sum * > checksums.txt && cat checksums.txt
+
+      - name: Criar a Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes

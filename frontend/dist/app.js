@@ -506,6 +506,92 @@
   }
 
   // ---------------------------------------------------------------
+  // Auto-update (eventos vindos do backend Go)
+  // ---------------------------------------------------------------
+
+  function setupUpdate() {
+    if (!window.runtime || !window.runtime.EventsOn) return;
+    window.runtime.EventsOn('update:disponivel', (at) => bannerUpdate('disponivel', at));
+    window.runtime.EventsOn('update:baixando', () => bannerUpdate('baixando'));
+    window.runtime.EventsOn('update:concluido', (d) => bannerUpdate('concluido', d));
+    window.runtime.EventsOn('update:erro', (msg) => {
+      bannerUpdate('disponivel', updateState.at);
+      toast('Falha na atualização: ' + msg, true);
+    });
+  }
+
+  const updateState = { at: null };
+
+  function bannerEl() {
+    let el = document.getElementById('update-banner');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'update-banner';
+      el.className = 'update-banner';
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+
+  function bannerUpdate(estado, dados) {
+    const el = bannerEl();
+
+    if (estado === 'disponivel') {
+      updateState.at = dados;
+      el.innerHTML = `
+        <span class="update-msg">Fynam <strong>${escapeHtml(dados.versaoNova)}</strong> disponível
+          <span class="update-sub">(você está na ${escapeHtml(dados.versaoAtual)})</span></span>
+        <span class="update-actions">
+          <button class="btn btn-ghost" data-upd="notas">Ver notas</button>
+          <button class="btn btn-primary" data-upd="aplicar">Atualizar agora</button>
+          <button class="btn btn-ghost" data-upd="depois">Depois</button>
+        </span>`;
+      el.className = 'update-banner show';
+    } else if (estado === 'baixando') {
+      el.innerHTML = `<span class="update-msg">Baixando e instalando a atualização…</span>`;
+      el.className = 'update-banner show';
+    } else if (estado === 'concluido') {
+      el.innerHTML = `
+        <span class="update-msg">Atualização instalada.</span>
+        <span class="update-actions">
+          <button class="btn btn-primary" data-upd="reiniciar">Reiniciar agora</button>
+          <button class="btn btn-ghost" data-upd="depois">Depois</button>
+        </span>`;
+      el.className = 'update-banner show';
+    }
+
+    el.querySelectorAll('[data-upd]').forEach((btn) => {
+      btn.addEventListener('click', () => acaoUpdate(btn.dataset.upd));
+    });
+  }
+
+  async function acaoUpdate(acao) {
+    if (acao === 'notas' && updateState.at) {
+      window.runtime.BrowserOpenURL(updateState.at.url);
+      return;
+    }
+    if (acao === 'depois') {
+      bannerEl().className = 'update-banner';
+      return;
+    }
+    if (acao === 'aplicar') {
+      try {
+        await App.BaixarEAplicarAtualizacao();
+      } catch (err) {
+        toast('Falha na atualização: ' + err, true);
+      }
+      return;
+    }
+    if (acao === 'reiniciar') {
+      try {
+        await App.ReiniciarApp();
+      } catch (err) {
+        toast('Não foi possível reiniciar: ' + err, true);
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------
   // Utilidades
   // ---------------------------------------------------------------
 
@@ -527,6 +613,7 @@
     setupDre();
     setupCadastros();
     setupExport();
+    setupUpdate();
     await refreshCategoriasEContas();
     await loadDashboard();
   }

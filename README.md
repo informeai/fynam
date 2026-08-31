@@ -76,11 +76,15 @@ fynam/
 ├── app.go               # App struct — métodos expostos ao frontend + regra de negócio
 ├── reports.go           # DTOs de saída do dashboard e dos relatórios
 ├── export.go            # métodos ExportarX + construtores de report.Tabela
+├── update_app.go        # métodos de auto-update expostos ao frontend + eventos
+├── version.go           # lê a versão do wails.json embutido
+├── updater_prod.go / updater_dev.go  # liga/desliga o updater por build tag
 ├── seed.go              # cadastro inicial (1 conta + plano de contas)
 ├── helpers.go           # utilidades de data e rótulos
 ├── internal/
 │   ├── model/           # tipos de domínio (Conta, Categoria, Lancamento, ...)
 │   ├── report/          # geração de PDF / XLSX / CSV a partir de uma Tabela neutra
+│   ├── updater/         # verificação e aplicação de atualização (GitHub Releases)
 │   └── storage/
 │       ├── storage.go   # interface Store (contrato de persistência, agnóstico)
 │       └── sqlite/       # implementação SQLite da interface Store (+ testes)
@@ -153,6 +157,8 @@ persistido; remover conta/categoria **anula** a referência nos lançamentos
 | `ExportarFluxoCaixa(ano, formato)`       | salva o fluxo de caixa em PDF/XLSX/CSV |
 | `ExportarDRE(inicio, fim, formato)`      | salva o DRE em PDF/XLSX/CSV |
 | `ExportarLancamentos(filtro, formato)`   | salva a lista de lançamentos em PDF/XLSX/CSV |
+| `VersaoAtual()` / `VerificarAtualizacao()` | versão em execução / checagem manual de update |
+| `BaixarEAplicarAtualizacao()` / `ReiniciarApp()` | instala a atualização e relança o app |
 
 O status de cada lançamento (`pendente`, `atrasado`, `pago`, `recebido`) é
 sempre **derivado das datas** em tempo de leitura e nunca é persistido.
@@ -176,6 +182,38 @@ Para adicionar um novo relatório exportável, basta escrever um construtor
 `tabelaX(...) report.Tabela` em `export.go` — os três formatos saem de graça.
 Ambas as libs são Go puro (sem CGO).
 
+### Atualização automática (GitHub Releases)
+
+Toda vez que o app abre, uma goroutine consulta a última
+[Release do repositório](https://github.com/informeai/fynam/releases) e, se
+houver versão mais nova que a de `wails.json` (`info.productVersion`), emite
+o evento `update:disponivel` e o frontend mostra um banner
+*"Fynam X.Y.Z disponível — Ver notas · Atualizar agora · Depois"*.
+
+- **`internal/updater`** ([`go-selfupdate`](https://github.com/creativeprojects/go-selfupdate)):
+  `Verificar()` consulta a API do GitHub e escolhe o asset do SO/arquitetura;
+  `Aplicar()` baixa o binário, confere o **SHA-256 contra `checksums.txt`**
+  da release e substitui o executável em execução.
+- **`update_app.go`**: métodos `VersaoAtual`, `VerificarAtualizacao`,
+  `BaixarEAplicarAtualizacao` e `ReiniciarApp` expostos ao frontend, mais os
+  eventos `update:baixando` / `update:concluido` / `update:erro`.
+- Fica **desativado no `wails dev`** (build tag `dev`) e quando não há versão
+  válida em `wails.json`.
+
+**Publicar uma versão:** bump em `wails.json` → `git tag v0.3.0` →
+`git push --tags`. O workflow `.github/workflows/release.yml` compila
+macOS (universal) / Windows / Linux, gera `checksums.txt` e cria a Release
+com os assets nos nomes que o updater espera
+(`fynam_darwin_universal.tar.gz`, `fynam_windows_amd64.zip`,
+`fynam_linux_amd64.tar.gz`).
+
+> **macOS:** o updater troca só o binário `fynam.app/Contents/MacOS/fynam`.
+> Funciona para o app não-assinado atual; para distribuição séria, o ideal
+> é assinar com Developer ID + notarizar e trocar o `.app` inteiro. A
+> validação por `checksums.txt` protege contra download corrompido, mas
+> **não** é assinatura criptográfica — para isso, trocar o
+> `ChecksumValidator` por um `ECDSAValidator` com chave pública embutida.
+
 ## Funcionalidades desta versão
 
 - **Dashboard** — saldo atual, total a pagar/receber em aberto, gráfico dos
@@ -189,6 +227,8 @@ Ambas as libs são Go puro (sem CGO).
   bruta, despesas e resultado.
 - **Exportação** — fluxo de caixa, DRE e listas de lançamentos em **PDF**,
   **Excel (.xlsx)** e **CSV**, via diálogo nativo "Salvar como".
+- **Atualização automática** — verifica as Releases do GitHub a cada abertura
+  e instala a versão nova com um clique.
 - **Cadastros** — contas bancárias/caixas e categorias (plano de contas).
 
 ## Testes
