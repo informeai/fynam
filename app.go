@@ -4,7 +4,10 @@ import (
 	"context"
 	"log"
 	"sort"
+	"strconv"
 	"sync"
+
+	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"fynam/internal/model"
 	"fynam/internal/storage"
@@ -24,17 +27,46 @@ type App struct {
 	upd               *updater.Updater
 	mu                sync.Mutex
 	ultimaAtualizacao *updater.Atualizacao // resultado da última verificação
+	empresaAtivaID    int                  // empresa em uso (protegida por mu)
 }
 
+const chaveEmpresaAtiva = "empresa_ativa"
+
 // NewApp cria a instância da aplicação com um Store já inicializado.
+// prepararBanco já deve ter rodado (garante ao menos uma empresa).
 func NewApp(store storage.Store) *App {
 	app := &App{store: store}
+	app.empresaAtivaID = app.resolverEmpresaAtiva()
+
 	if u, err := updater.New("informeai", "fynam", appVersion); err != nil {
 		log.Printf("auto-update desativado: %v", err)
 	} else {
 		app.upd = u
 	}
 	return app
+}
+
+// resolverEmpresaAtiva devolve a empresa a usar: a salva em config, se ainda
+// existir; senão a primeira da lista (persistindo a escolha). 0 se não houver
+// nenhuma (não deve acontecer depois de prepararBanco).
+func (a *App) resolverEmpresaAtiva() int {
+	empresas, err := a.store.ListEmpresas(a.c())
+	if err != nil || len(empresas) == 0 {
+		return 0
+	}
+
+	if v, err := a.store.GetConfig(a.c(), chaveEmpresaAtiva); err == nil && v != "" {
+		if id, err := strconv.Atoi(v); err == nil {
+			for _, e := range empresas {
+				if e.ID == id {
+					return id
+				}
+			}
+		}
+	}
+
+	_ = a.store.SetConfig(a.c(), chaveEmpresaAtiva, strconv.Itoa(empresas[0].ID))
+	return empresas[0].ID
 }
 
 // startup guarda o contexto do Wails e dispara a verificação de atualização.
@@ -53,16 +85,32 @@ func (a *App) c() context.Context {
 	return context.Background()
 }
 
+// empresa devolve o id da empresa ativa (todo dado é escopado por ela).
+func (a *App) empresa() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.empresaAtivaID
+}
+
+// emitir dispara um evento para o frontend. Vira no-op quando não há
+// runtime do Wails (testes, chamadas antes do startup).
+func (a *App) emitir(evento string, dados ...interface{}) {
+	if a.ctx == nil {
+		return
+	}
+	wruntime.EventsEmit(a.ctx, evento, dados...)
+}
+
 // =====================================================================
 // Contas bancárias / caixas
 // =====================================================================
 
 func (a *App) ListContas() ([]model.Conta, error) {
-	return a.store.ListContas(a.c())
+	return a.store.ListContas(a.c(), a.empresa())
 }
 
 func (a *App) CreateConta(nome string, saldoInicial float64) (model.Conta, error) {
-	return a.store.CreateConta(a.c(), model.Conta{Nome: nome, SaldoInicial: saldoInicial})
+	return a.store.CreateConta(a.c(), a.empresa(), model.Conta{Nome: nome, SaldoInicial: saldoInicial})
 }
 
 func (a *App) UpdateConta(id int, nome string, saldoInicial float64) (model.Conta, error) {
@@ -78,11 +126,11 @@ func (a *App) DeleteConta(id int) error {
 // =====================================================================
 
 func (a *App) ListCategorias() ([]model.Categoria, error) {
-	return a.store.ListCategorias(a.c())
+	return a.store.ListCategorias(a.c(), a.empresa())
 }
 
 func (a *App) CreateCategoria(nome string, tipo string) (model.Categoria, error) {
-	return a.store.CreateCategoria(a.c(), model.Categoria{Nome: nome, Tipo: tipo})
+	return a.store.CreateCategoria(a.c(), a.empresa(), model.Categoria{Nome: nome, Tipo: tipo})
 }
 
 func (a *App) DeleteCategoria(id int) error {
@@ -96,7 +144,7 @@ func (a *App) DeleteCategoria(id int) error {
 // ListLancamentos delega os filtros estruturais ao Store e aplica aqui o
 // filtro por Status (que é derivado das datas).
 func (a *App) ListLancamentos(filtro model.LancamentoFiltro) ([]model.Lancamento, error) {
-	itens, err := a.store.ListLancamentos(a.c(), filtro)
+	itens, err := a.store.ListLancamentos(a.c(), a.empresa(), filtro)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +170,7 @@ func (a *App) CreateLancamento(in model.LancamentoInput) (model.Lancamento, erro
 		DataPagamento:  "",
 		Observacoes:    in.Observacoes,
 	}
-	criado, err := a.store.CreateLancamento(a.c(), l)
+	criado, err := a.store.CreateLancamento(a.c(), a.empresa(), l)
 	if err != nil {
 		return model.Lancamento{}, err
 	}
@@ -179,11 +227,12 @@ func (a *App) Estornar(id int) (model.Lancamento, error) {
 // =====================================================================
 
 func (a *App) DashboardResumo() (Resumo, error) {
-	contas, err := a.store.ListContas(a.c())
+	emp := a.empresa()
+	contas, err := a.store.ListContas(a.c(), emp)
 	if err != nil {
 		return Resumo{}, err
 	}
-	brutos, err := a.store.ListLancamentos(a.c(), model.LancamentoFiltro{})
+	brutos, err := a.store.ListLancamentos(a.c(), emp, model.LancamentoFiltro{})
 	if err != nil {
 		return Resumo{}, err
 	}
@@ -261,11 +310,12 @@ func (a *App) DashboardResumo() (Resumo, error) {
 // RelatorioFluxoCaixa devolve a visão mensal (12 meses do ano informado)
 // com entradas, saídas, saldo do mês e saldo acumulado.
 func (a *App) RelatorioFluxoCaixa(ano int) ([]FluxoCaixaLinha, error) {
-	contas, err := a.store.ListContas(a.c())
+	emp := a.empresa()
+	contas, err := a.store.ListContas(a.c(), emp)
 	if err != nil {
 		return nil, err
 	}
-	lancs, err := a.store.ListLancamentos(a.c(), model.LancamentoFiltro{
+	lancs, err := a.store.ListLancamentos(a.c(), emp, model.LancamentoFiltro{
 		DataInicio: monthKey(ano, 1) + "-01",
 		DataFim:    monthKey(ano, 12) + "-31",
 	})
@@ -307,11 +357,12 @@ func (a *App) RelatorioFluxoCaixa(ano int) ([]FluxoCaixaLinha, error) {
 
 // RelatorioDRE devolve um DRE simplificado por período, agrupado por categoria.
 func (a *App) RelatorioDRE(dataInicio string, dataFim string) (DRE, error) {
-	categorias, err := a.store.ListCategorias(a.c())
+	emp := a.empresa()
+	categorias, err := a.store.ListCategorias(a.c(), emp)
 	if err != nil {
 		return DRE{}, err
 	}
-	lancs, err := a.store.ListLancamentos(a.c(), model.LancamentoFiltro{
+	lancs, err := a.store.ListLancamentos(a.c(), emp, model.LancamentoFiltro{
 		DataInicio: dataInicio,
 		DataFim:    dataFim,
 	})

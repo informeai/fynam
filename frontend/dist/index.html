@@ -13,6 +13,10 @@
         <span class="brand-mark">F</span>
         <span class="brand-name">Fynam<small>Gestão financeira</small></span>
       </div>
+      <div class="empresa-switch">
+        <label for="empresa-atual">Empresa</label>
+        <select id="empresa-atual"></select>
+      </div>
       <nav class="nav">
         <button class="nav-item active" data-page="dashboard">
           <span class="nav-ico">◆</span> Dashboard
@@ -29,11 +33,14 @@
         <button class="nav-item" data-page="dre">
           <span class="nav-ico">▤</span> DRE
         </button>
+        <button class="nav-item" data-page="empresas">
+          <span class="nav-ico">▦</span> Empresas
+        </button>
         <button class="nav-item" data-page="cadastros">
           <span class="nav-ico">⚙</span> Cadastros
         </button>
       </nav>
-      <div class="sidebar-footer">Wails + Go · v0.2</div>
+      <div class="sidebar-footer">Wails + Go</div>
     </aside>
 
     <main class="content">
@@ -185,6 +192,32 @@
             <thead><tr><th>Categoria</th><th>Tipo</th><th>Total</th></tr></thead>
             <tbody></tbody>
           </table>
+        </div>
+      </section>
+
+      <!-- ===================== EMPRESAS ===================== -->
+      <section id="page-empresas" class="page">
+        <header class="page-header">
+          <h1>Empresas</h1>
+        </header>
+        <p class="subtitle" style="margin-bottom:16px">
+          Cada empresa tem contas, categorias e lançamentos próprios. A empresa
+          ativa é escolhida na barra lateral.
+        </p>
+        <div class="panels">
+          <div class="panel">
+            <h2>Nova empresa</h2>
+            <form id="form-empresa" class="inline-form">
+              <input type="text" id="empresa-nome" placeholder="Nome / razão social" required />
+              <input type="text" id="empresa-cnpj" placeholder="CNPJ (opcional)" />
+              <button class="btn btn-secondary" type="submit">Adicionar</button>
+            </form>
+            <p class="subtitle">A nova empresa já vem com o plano de contas básico e uma conta "Caixa".</p>
+          </div>
+          <div class="panel">
+            <h2>Empresas cadastradas</h2>
+            <div id="lista-empresas" class="mini-list"></div>
+          </div>
         </div>
       </section>
 

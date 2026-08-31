@@ -46,7 +46,7 @@ func (a *App) ExportarLancamentos(filtro model.LancamentoFiltro, formato string)
 	if err != nil {
 		return "", err
 	}
-	categorias, err := a.store.ListCategorias(a.c())
+	categorias, err := a.store.ListCategorias(a.c(), a.empresa())
 	if err != nil {
 		return "", err
 	}

@@ -4,6 +4,8 @@ import {model} from '../models';
 import {main} from '../models';
 import {updater} from '../models';
 
+export function AtualizarEmpresa(arg1:number,arg2:string,arg3:string):Promise<model.Empresa>;
+
 export function BaixarEAplicarAtualizacao():Promise<void>;
 
 export function CreateCategoria(arg1:string,arg2:string):Promise<model.Categoria>;
@@ -11,6 +13,8 @@ export function CreateCategoria(arg1:string,arg2:string):Promise<model.Categoria
 export function CreateConta(arg1:string,arg2:number):Promise<model.Conta>;
 
 export function CreateLancamento(arg1:model.LancamentoInput):Promise<model.Lancamento>;
+
+export function CriarEmpresa(arg1:string,arg2:string):Promise<model.Empresa>;
 
 export function DashboardResumo():Promise<main.Resumo>;
 
@@ -20,7 +24,11 @@ export function DeleteConta(arg1:number):Promise<void>;
 
 export function DeleteLancamento(arg1:number):Promise<void>;
 
+export function EmpresaAtiva():Promise<model.Empresa>;
+
 export function Estornar(arg1:number):Promise<model.Lancamento>;
+
+export function ExcluirEmpresa(arg1:number):Promise<void>;
 
 export function ExportarDRE(arg1:string,arg2:string,arg3:string):Promise<string>;
 
@@ -32,6 +40,8 @@ export function ListCategorias():Promise<Array<model.Categoria>>;
 
 export function ListContas():Promise<Array<model.Conta>>;
 
+export function ListEmpresas():Promise<Array<model.Empresa>>;
+
 export function ListLancamentos(arg1:model.LancamentoFiltro):Promise<Array<model.Lancamento>>;
 
 export function MarcarBaixa(arg1:number,arg2:string):Promise<model.Lancamento>;
@@ -41,6 +51,8 @@ export function ReiniciarApp():Promise<void>;
 export function RelatorioDRE(arg1:string,arg2:string):Promise<main.DRE>;
 
 export function RelatorioFluxoCaixa(arg1:number):Promise<Array<main.FluxoCaixaLinha>>;
+
+export function TrocarEmpresa(arg1:number):Promise<void>;
 
 export function UpdateConta(arg1:number,arg2:string,arg3:number):Promise<model.Conta>;
 

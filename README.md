@@ -1,8 +1,9 @@
 # Fynam (protótipo)
 
-Aplicativo desktop de gestão financeira feito com **Wails + Go**. Funcionalidades
-essenciais: dashboard, contas a pagar, contas a receber, fluxo de caixa e
-DRE simplificado.
+Aplicativo desktop de gestão financeira feito com **Wails + Go**, com suporte a
+**múltiplas empresas/filiais**. Funcionalidades essenciais: dashboard, contas a
+pagar, contas a receber, fluxo de caixa e DRE simplificado — tudo isolado por
+empresa.
 
 ## Stack
 
@@ -79,10 +80,11 @@ fynam/
 ├── update_app.go        # métodos de auto-update expostos ao frontend + eventos
 ├── version.go           # lê a versão do wails.json embutido
 ├── updater_prod.go / updater_dev.go  # liga/desliga o updater por build tag
-├── seed.go              # cadastro inicial (1 conta + plano de contas)
+├── empresa_app.go       # CRUD de empresas + TrocarEmpresa (evento empresa:trocada)
+├── seed.go              # prepararBanco: 1ª empresa + adoção de dados soltos + seed
 ├── helpers.go           # utilidades de data e rótulos
 ├── internal/
-│   ├── model/           # tipos de domínio (Conta, Categoria, Lancamento, ...)
+│   ├── model/           # tipos de domínio (Empresa, Conta, Categoria, Lancamento, ...)
 │   ├── report/          # geração de PDF / XLSX / CSV a partir de uma Tabela neutra
 │   ├── updater/         # verificação e aplicação de atualização (GitHub Releases)
 │   └── storage/
@@ -142,11 +144,33 @@ inexistente → `ErrNaoEncontrado`; `Status` do lançamento nunca é
 persistido; remover conta/categoria **anula** a referência nos lançamentos
 (não os apaga).
 
+### Múltiplas empresas / filiais
+
+Todo dado é isolado por **empresa**: `contas`, `categorias` e `lancamentos`
+têm `empresa_id`, e os métodos `List*`/`Create*` do `Store` recebem o id da
+empresa. O `App` guarda a **empresa ativa** (`empresaAtivaID`, persistida na
+tabela `config`, chave `empresa_ativa`) e injeta esse id em toda chamada —
+o frontend só chama `ListContas()` e recebe as contas da empresa ativa.
+
+- **Trocar de empresa:** seletor na barra lateral → `App.TrocarEmpresa(id)`
+  → evento `empresa:trocada` → o frontend recarrega tudo.
+- **Nova empresa:** tela *Empresas* → `App.CriarEmpresa(nome, cnpj)` já cria
+  o plano de contas básico + uma conta "Caixa" e passa a trabalhar nela.
+- **Excluir:** apaga em cascata contas/categorias/lançamentos da empresa;
+  não deixa excluir a última.
+- **Migração automática:** `prepararBanco` (em `seed.go`) roda no boot — na
+  primeira vez cria "Empresa Principal" e, via
+  `Store.MigrarRegistrosSoltos`, adota nela qualquer registro sem
+  `empresa_id` (dados de versões anteriores). O `sqlite.migrate` adiciona a
+  coluna `empresa_id` a bancos antigos com `ALTER TABLE`.
+
 ### Mapa da API (Go ⇄ interface)
 
 | Método Go (`App`)                         | Uso |
 | ----------------------------------------- | --- |
-| `ListContas` / `CreateConta` / `UpdateConta` / `DeleteConta` | contas bancárias / caixas |
+| `ListEmpresas` / `EmpresaAtiva` / `CriarEmpresa` / `AtualizarEmpresa` / `ExcluirEmpresa` | gerenciar empresas/filiais |
+| `TrocarEmpresa(id)`                        | muda a empresa ativa (evento `empresa:trocada`) |
+| `ListContas` / `CreateConta` / `UpdateConta` / `DeleteConta` | contas bancárias / caixas (da empresa ativa) |
 | `ListCategorias` / `CreateCategoria` / `DeleteCategoria`     | plano de contas |
 | `ListLancamentos(filtro)`                 | lista contas a pagar/receber com filtros |
 | `CreateLancamento` / `UpdateLancamento` / `DeleteLancamento` | CRUD de lançamentos |
@@ -216,6 +240,8 @@ com os assets nos nomes que o updater espera
 
 ## Funcionalidades desta versão
 
+- **Múltiplas empresas / filiais** — cada empresa com suas próprias contas,
+  categorias e lançamentos; troca pela barra lateral, gestão na tela *Empresas*.
 - **Dashboard** — saldo atual, total a pagar/receber em aberto, gráfico dos
   últimos 6 meses (entradas x saídas) e lista dos próximos vencimentos.
 - **Contas a Pagar / Contas a Receber** — cadastro, edição, exclusão,
@@ -238,16 +264,17 @@ go test ./...
 ```
 
 Cobrem a implementação SQLite da interface `Store` (CRUD, filtros, baixa/
-estorno, anulação de referência ao remover categoria/conta, erros de id
-inexistente), a regra de negócio em `app.go` (saldo do dashboard, DRE,
-fluxo de caixa acumulado e filtro por status derivado) e a geração de
-relatórios em `internal/report` (formatação de moeda pt-BR e saída válida
-de PDF, XLSX e CSV). Cada implementação futura de `Store` pode reaproveitar
-o mesmo estilo de teste do pacote `internal/storage/sqlite`.
+estorno, anulação de referência, erros de id inexistente, **isolamento por
+empresa, cascade de exclusão, migração de banco antigo e adoção de dados
+soltos**), a regra de negócio em `app.go` (saldo do dashboard, DRE, fluxo de
+caixa acumulado, filtro por status derivado e **fluxo de múltiplas
+empresas**) e a geração de relatórios em `internal/report` (moeda pt-BR e
+saída válida de PDF, XLSX e CSV). Cada implementação futura de `Store` pode
+reaproveitar o mesmo estilo de teste do pacote `internal/storage/sqlite`.
 
 ## O que ainda falta para virar um produto completo
 
-- **Múltiplas filiais** e **múltiplos usuários/permissões**
+- **Múltiplos usuários/permissões** (as empresas já são isoladas)
 - **Conciliação bancária** (importação de extrato OFX/CSV)
 - **Controle de inadimplência** com régua de cobrança
 - **Backup automático em nuvem** (hoje os dados ficam só na máquina local)

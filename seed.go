@@ -2,27 +2,62 @@ package main
 
 import (
 	"context"
+	"time"
 
 	"fynam/internal/model"
 	"fynam/internal/storage"
 )
 
-// seedIfEmpty cria um cadastro básico (1 conta + plano de contas) na
-// primeira execução, de forma independente do backend de persistência.
-// Se o repositório já tiver contas, não faz nada.
-func seedIfEmpty(ctx context.Context, store storage.Store) error {
-	contas, err := store.ListContas(ctx)
+// prepararBanco garante que exista pelo menos uma empresa e que a primeira
+// execução (ou o upgrade de uma versão sem múltiplas empresas) fique num
+// estado consistente:
+//
+//   - se não há nenhuma empresa, cria "Empresa Principal";
+//   - adota nela quaisquer contas/categorias/lançamentos "soltos" (dados de
+//     versões anteriores);
+//   - se essa empresa ficou sem cadastro nenhum, faz o seed padrão
+//     (1 conta + plano de contas).
+//
+// É idempotente: em execuções seguintes (já com empresa) não faz nada.
+func prepararBanco(ctx context.Context, store storage.Store) error {
+	empresas, err := store.ListEmpresas(ctx)
 	if err != nil {
 		return err
 	}
-	if len(contas) > 0 {
+	if len(empresas) > 0 {
 		return nil
 	}
-	return seedPadrao(ctx, store)
+
+	emp, err := store.CreateEmpresa(ctx, model.Empresa{
+		Nome:     "Empresa Principal",
+		CriadaEm: time.Now().Format("2006-01-02"),
+	})
+	if err != nil {
+		return err
+	}
+
+	if _, err := store.MigrarRegistrosSoltos(ctx, emp.ID); err != nil {
+		return err
+	}
+
+	contas, err := store.ListContas(ctx, emp.ID)
+	if err != nil {
+		return err
+	}
+	cats, err := store.ListCategorias(ctx, emp.ID)
+	if err != nil {
+		return err
+	}
+	if len(contas) == 0 && len(cats) == 0 {
+		return seedEmpresa(ctx, store, emp.ID)
+	}
+	return nil
 }
 
-func seedPadrao(ctx context.Context, store storage.Store) error {
-	if _, err := store.CreateConta(ctx, model.Conta{
+// seedEmpresa popula uma empresa recém-criada com uma conta e o plano de
+// contas básico, para não começar com todas as telas vazias.
+func seedEmpresa(ctx context.Context, store storage.Store, empresaID int) error {
+	if _, err := store.CreateConta(ctx, empresaID, model.Conta{
 		Nome: "Caixa / Conta Principal", SaldoInicial: 0,
 	}); err != nil {
 		return err
@@ -40,7 +75,7 @@ func seedPadrao(ctx context.Context, store storage.Store) error {
 		{Nome: "Outras despesas", Tipo: "despesa"},
 	}
 	for _, c := range padrao {
-		if _, err := store.CreateCategoria(ctx, c); err != nil {
+		if _, err := store.CreateCategoria(ctx, empresaID, c); err != nil {
 			return err
 		}
 	}

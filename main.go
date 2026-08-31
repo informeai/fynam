@@ -31,7 +31,7 @@ func main() {
 	}
 	defer store.Close()
 
-	if err := seedIfEmpty(context.Background(), store); err != nil {
+	if err := prepararBanco(context.Background(), store); err != nil {
 		log.Fatalf("falha ao preparar os dados iniciais: %v", err)
 	}
 

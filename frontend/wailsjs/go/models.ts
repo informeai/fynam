@@ -166,6 +166,24 @@ export namespace model {
 	        this.saldoInicial = source["saldoInicial"];
 	    }
 	}
+	export class Empresa {
+	    id: number;
+	    nome: string;
+	    cnpj: string;
+	    criadaEm: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Empresa(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.nome = source["nome"];
+	        this.cnpj = source["cnpj"];
+	        this.criadaEm = source["criadaEm"];
+	    }
+	}
 	export class Lancamento {
 	    id: number;
 	    tipo: string;

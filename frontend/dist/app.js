@@ -8,6 +8,8 @@
   const state = {
     categorias: [],
     contas: [],
+    empresas: [],
+    empresaAtivaId: null,
     filtroPagar: 'todos',
     filtroReceber: 'todos'
   };
@@ -44,7 +46,111 @@
     if (page === 'receber') loadLancamentos('receber');
     if (page === 'fluxo') loadFluxo();
     if (page === 'dre') loadDre();
+    if (page === 'empresas') carregarEmpresas();
     if (page === 'cadastros') loadCadastros();
+  }
+
+  function paginaAtual() {
+    const ativa = document.querySelector('.nav-item.active');
+    return ativa ? ativa.dataset.page : 'dashboard';
+  }
+
+  // ---------------------------------------------------------------
+  // Empresas (múltiplas empresas / filiais)
+  // ---------------------------------------------------------------
+
+  function setupEmpresas() {
+    document.getElementById('empresa-atual').addEventListener('change', async (e) => {
+      try {
+        await App.TrocarEmpresa(Number(e.target.value));
+      } catch (err) {
+        toast('Não foi possível trocar de empresa: ' + err, true);
+      }
+    });
+
+    document.getElementById('form-empresa').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const nome = document.getElementById('empresa-nome').value.trim();
+      const cnpj = document.getElementById('empresa-cnpj').value.trim();
+      if (!nome) return;
+      try {
+        await App.CriarEmpresa(nome, cnpj);
+        e.target.reset();
+        toast('Empresa "' + nome + '" criada e ativada.');
+      } catch (err) {
+        toast('Falha ao criar empresa: ' + err, true);
+      }
+    });
+
+    if (window.runtime && window.runtime.EventsOn) {
+      window.runtime.EventsOn('empresa:trocada', () => aoTrocarEmpresa());
+    }
+  }
+
+  async function carregarEmpresas() {
+    state.empresas = await App.ListEmpresas();
+    const ativa = await App.EmpresaAtiva();
+    state.empresaAtivaId = ativa.id;
+
+    const sel = document.getElementById('empresa-atual');
+    sel.innerHTML = state.empresas
+      .map((e) => `<option value="${e.id}">${escapeHtml(e.nome)}</option>`)
+      .join('');
+    sel.value = String(ativa.id);
+
+    const lista = document.getElementById('lista-empresas');
+    if (!lista) return;
+    lista.innerHTML = state.empresas.map((e) => `
+      <div class="mini-row">
+        <div class="mini-main">
+          <span>${escapeHtml(e.nome)}${e.id === ativa.id ? ' <span class="badge pago">ativa</span>' : ''}</span>
+          <span class="mini-sub">${e.cnpj ? escapeHtml(e.cnpj) + ' · ' : ''}desde ${fmtDate(e.criadaEm)}</span>
+        </div>
+        <span class="row-actions">
+          ${e.id === ativa.id ? '' : `<button class="icon-btn" data-emp-usar="${e.id}">Usar</button>`}
+          <button class="icon-btn" data-emp-editar="${e.id}">Renomear</button>
+          <button class="icon-btn danger" data-emp-excluir="${e.id}">Excluir</button>
+        </span>
+      </div>`).join('');
+
+    lista.querySelectorAll('[data-emp-usar]').forEach((b) =>
+      b.addEventListener('click', () => App.TrocarEmpresa(Number(b.dataset.empUsar))));
+    lista.querySelectorAll('[data-emp-editar]').forEach((b) =>
+      b.addEventListener('click', () => editarEmpresa(Number(b.dataset.empEditar))));
+    lista.querySelectorAll('[data-emp-excluir]').forEach((b) =>
+      b.addEventListener('click', () => excluirEmpresa(Number(b.dataset.empExcluir))));
+  }
+
+  async function editarEmpresa(id) {
+    const emp = state.empresas.find((e) => e.id === id);
+    const nome = prompt('Nome da empresa:', emp ? emp.nome : '');
+    if (nome === null) return;
+    const cnpj = prompt('CNPJ (opcional):', emp ? emp.cnpj : '') || '';
+    try {
+      await App.AtualizarEmpresa(id, nome.trim(), cnpj.trim());
+      carregarEmpresas();
+    } catch (err) {
+      toast('Falha ao atualizar: ' + err, true);
+    }
+  }
+
+  async function excluirEmpresa(id) {
+    const emp = state.empresas.find((e) => e.id === id);
+    if (!confirm(`Excluir "${emp ? emp.nome : 'esta empresa'}" e TODOS os seus dados (contas, categorias, lançamentos)?`)) return;
+    try {
+      await App.ExcluirEmpresa(id);
+      toast('Empresa excluída.');
+      carregarEmpresas();
+    } catch (err) {
+      toast('' + err, true);
+    }
+  }
+
+  // recarrega tudo depois de trocar de empresa
+  async function aoTrocarEmpresa() {
+    await refreshCategoriasEContas();
+    await carregarEmpresas();
+    goToPage(paginaAtual());
   }
 
   // ---------------------------------------------------------------
@@ -614,6 +720,8 @@
     setupCadastros();
     setupExport();
     setupUpdate();
+    setupEmpresas();
+    await carregarEmpresas();
     await refreshCategoriasEContas();
     await loadDashboard();
   }

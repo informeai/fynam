@@ -49,19 +49,34 @@ func New(path string) (*Store, error) {
 
 func (s *Store) Close() error { return s.db.Close() }
 
-const schema = `
+// schemaTabelas cria as tabelas (em bancos novos, já com empresa_id) e os
+// índices que não dependem de empresa_id.
+const schemaTabelas = `
+CREATE TABLE IF NOT EXISTS empresas (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome      TEXT NOT NULL,
+    cnpj      TEXT NOT NULL DEFAULT '',
+    criada_em TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS config (
+    chave TEXT PRIMARY KEY,
+    valor TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS contas (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    empresa_id    INTEGER REFERENCES empresas(id) ON DELETE CASCADE,
     nome          TEXT    NOT NULL,
     saldo_inicial REAL    NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS categorias (
-    id   INTEGER PRIMARY KEY AUTOINCREMENT,
-    nome TEXT    NOT NULL,
-    tipo TEXT    NOT NULL
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    empresa_id INTEGER REFERENCES empresas(id) ON DELETE CASCADE,
+    nome       TEXT    NOT NULL,
+    tipo       TEXT    NOT NULL
 );
 CREATE TABLE IF NOT EXISTS lancamentos (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    empresa_id      INTEGER REFERENCES empresas(id)   ON DELETE CASCADE,
     tipo            TEXT    NOT NULL,
     descricao       TEXT    NOT NULL,
     categoria_id    INTEGER REFERENCES categorias(id) ON DELETE SET NULL,
@@ -75,8 +90,61 @@ CREATE INDEX IF NOT EXISTS idx_lancamentos_venc ON lancamentos(data_vencimento);
 CREATE INDEX IF NOT EXISTS idx_lancamentos_tipo ON lancamentos(tipo);
 `
 
+// schemaIndicesEmpresa só pode rodar depois que a coluna empresa_id existe
+// em todas as tabelas (bancos antigos precisam do ALTER antes).
+const schemaIndicesEmpresa = `
+CREATE INDEX IF NOT EXISTS idx_contas_empresa      ON contas(empresa_id);
+CREATE INDEX IF NOT EXISTS idx_categorias_empresa  ON categorias(empresa_id);
+CREATE INDEX IF NOT EXISTS idx_lancamentos_empresa ON lancamentos(empresa_id);
+`
+
 func (s *Store) migrate(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, schema)
+	if _, err := s.db.ExecContext(ctx, schemaTabelas); err != nil {
+		return err
+	}
+	// Bancos criados antes do suporte a múltiplas empresas não têm a coluna
+	// empresa_id — adiciona (as linhas existentes ficam com NULL e são
+	// adotadas por MigrarRegistrosSoltos).
+	for _, tab := range []string{"contas", "categorias", "lancamentos"} {
+		if err := s.garantirColuna(ctx, tab, "empresa_id",
+			"ALTER TABLE "+tab+" ADD COLUMN empresa_id INTEGER REFERENCES empresas(id) ON DELETE CASCADE"); err != nil {
+			return err
+		}
+	}
+	if _, err := s.db.ExecContext(ctx, schemaIndicesEmpresa); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Store) garantirColuna(ctx context.Context, tabela, coluna, ddl string) error {
+	rows, err := s.db.QueryContext(ctx, "PRAGMA table_info("+tabela+")")
+	if err != nil {
+		return err
+	}
+	existe := false
+	for rows.Next() {
+		var (
+			cid, notnull, pk int
+			nome, tipo       string
+			dflt             sql.NullString
+		)
+		if err := rows.Scan(&cid, &nome, &tipo, &notnull, &dflt, &pk); err != nil {
+			rows.Close()
+			return err
+		}
+		if nome == coluna {
+			existe = true
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if existe {
+		return nil
+	}
+	_, err = s.db.ExecContext(ctx, ddl)
 	return err
 }
 
@@ -100,12 +168,113 @@ func fromNullInt(n sql.NullInt64) *int {
 }
 
 // ---------------------------------------------------------------------
+// Empresas
+// ---------------------------------------------------------------------
+
+func (s *Store) ListEmpresas(ctx context.Context) ([]model.Empresa, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, nome, cnpj, criada_em FROM empresas ORDER BY nome, id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []model.Empresa{}
+	for rows.Next() {
+		var e model.Empresa
+		if err := rows.Scan(&e.ID, &e.Nome, &e.CNPJ, &e.CriadaEm); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) GetEmpresa(ctx context.Context, id int) (model.Empresa, error) {
+	var e model.Empresa
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, nome, cnpj, criada_em FROM empresas WHERE id = ?`, id).
+		Scan(&e.ID, &e.Nome, &e.CNPJ, &e.CriadaEm)
+	if errors.Is(err, sql.ErrNoRows) {
+		return model.Empresa{}, storage.ErrNaoEncontrado
+	}
+	return e, err
+}
+
+func (s *Store) CreateEmpresa(ctx context.Context, e model.Empresa) (model.Empresa, error) {
+	res, err := s.db.ExecContext(ctx,
+		`INSERT INTO empresas (nome, cnpj, criada_em) VALUES (?, ?, ?)`,
+		e.Nome, e.CNPJ, e.CriadaEm)
+	if err != nil {
+		return model.Empresa{}, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return model.Empresa{}, err
+	}
+	e.ID = int(id)
+	return e, nil
+}
+
+func (s *Store) UpdateEmpresa(ctx context.Context, e model.Empresa) (model.Empresa, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE empresas SET nome = ?, cnpj = ? WHERE id = ?`, e.Nome, e.CNPJ, e.ID)
+	if err != nil {
+		return model.Empresa{}, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return model.Empresa{}, storage.ErrNaoEncontrado
+	}
+	return s.GetEmpresa(ctx, e.ID)
+}
+
+func (s *Store) DeleteEmpresa(ctx context.Context, id int) error {
+	// ON DELETE CASCADE cuida de contas, categorias e lançamentos.
+	_, err := s.db.ExecContext(ctx, `DELETE FROM empresas WHERE id = ?`, id)
+	return err
+}
+
+func (s *Store) MigrarRegistrosSoltos(ctx context.Context, empresaID int) (int, error) {
+	var total int
+	for _, tab := range []string{"contas", "categorias", "lancamentos"} {
+		res, err := s.db.ExecContext(ctx,
+			`UPDATE `+tab+` SET empresa_id = ? WHERE empresa_id IS NULL`, empresaID)
+		if err != nil {
+			return total, err
+		}
+		n, _ := res.RowsAffected()
+		total += int(n)
+	}
+	return total, nil
+}
+
+// ---------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------
+
+func (s *Store) GetConfig(ctx context.Context, chave string) (string, error) {
+	var v string
+	err := s.db.QueryRowContext(ctx, `SELECT valor FROM config WHERE chave = ?`, chave).Scan(&v)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return v, err
+}
+
+func (s *Store) SetConfig(ctx context.Context, chave, valor string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO config (chave, valor) VALUES (?, ?)
+		 ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor`, chave, valor)
+	return err
+}
+
+// ---------------------------------------------------------------------
 // Contas
 // ---------------------------------------------------------------------
 
-func (s *Store) ListContas(ctx context.Context) ([]model.Conta, error) {
+func (s *Store) ListContas(ctx context.Context, empresaID int) ([]model.Conta, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, nome, saldo_inicial FROM contas ORDER BY id`)
+		`SELECT id, nome, saldo_inicial FROM contas WHERE empresa_id = ? ORDER BY id`, empresaID)
 	if err != nil {
 		return nil, err
 	}
@@ -133,9 +302,10 @@ func (s *Store) GetConta(ctx context.Context, id int) (model.Conta, error) {
 	return c, err
 }
 
-func (s *Store) CreateConta(ctx context.Context, c model.Conta) (model.Conta, error) {
+func (s *Store) CreateConta(ctx context.Context, empresaID int, c model.Conta) (model.Conta, error) {
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO contas (nome, saldo_inicial) VALUES (?, ?)`, c.Nome, c.SaldoInicial)
+		`INSERT INTO contas (empresa_id, nome, saldo_inicial) VALUES (?, ?, ?)`,
+		empresaID, c.Nome, c.SaldoInicial)
 	if err != nil {
 		return model.Conta{}, err
 	}
@@ -168,9 +338,9 @@ func (s *Store) DeleteConta(ctx context.Context, id int) error {
 // Categorias
 // ---------------------------------------------------------------------
 
-func (s *Store) ListCategorias(ctx context.Context) ([]model.Categoria, error) {
+func (s *Store) ListCategorias(ctx context.Context, empresaID int) ([]model.Categoria, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, nome, tipo FROM categorias ORDER BY id`)
+		`SELECT id, nome, tipo FROM categorias WHERE empresa_id = ? ORDER BY id`, empresaID)
 	if err != nil {
 		return nil, err
 	}
@@ -187,9 +357,9 @@ func (s *Store) ListCategorias(ctx context.Context) ([]model.Categoria, error) {
 	return out, rows.Err()
 }
 
-func (s *Store) CreateCategoria(ctx context.Context, c model.Categoria) (model.Categoria, error) {
+func (s *Store) CreateCategoria(ctx context.Context, empresaID int, c model.Categoria) (model.Categoria, error) {
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO categorias (nome, tipo) VALUES (?, ?)`, c.Nome, c.Tipo)
+		`INSERT INTO categorias (empresa_id, nome, tipo) VALUES (?, ?, ?)`, empresaID, c.Nome, c.Tipo)
 	if err != nil {
 		return model.Categoria{}, err
 	}
@@ -227,11 +397,10 @@ func scanLancamento(sc interface{ Scan(...any) error }) (model.Lancamento, error
 	return l, nil
 }
 
-func (s *Store) ListLancamentos(ctx context.Context, f model.LancamentoFiltro) ([]model.Lancamento, error) {
-	var (
-		where []string
-		args  []any
-	)
+func (s *Store) ListLancamentos(ctx context.Context, empresaID int, f model.LancamentoFiltro) ([]model.Lancamento, error) {
+	where := []string{"empresa_id = ?"}
+	args := []any{empresaID}
+
 	if f.Tipo != "" {
 		where = append(where, "tipo = ?")
 		args = append(args, f.Tipo)
@@ -245,11 +414,8 @@ func (s *Store) ListLancamentos(ctx context.Context, f model.LancamentoFiltro) (
 		args = append(args, f.DataFim)
 	}
 
-	q := `SELECT ` + lancamentoCols + ` FROM lancamentos`
-	if len(where) > 0 {
-		q += ` WHERE ` + strings.Join(where, " AND ")
-	}
-	q += ` ORDER BY data_vencimento, id`
+	q := `SELECT ` + lancamentoCols + ` FROM lancamentos WHERE ` +
+		strings.Join(where, " AND ") + ` ORDER BY data_vencimento, id`
 
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
@@ -278,12 +444,12 @@ func (s *Store) GetLancamento(ctx context.Context, id int) (model.Lancamento, er
 	return l, err
 }
 
-func (s *Store) CreateLancamento(ctx context.Context, l model.Lancamento) (model.Lancamento, error) {
+func (s *Store) CreateLancamento(ctx context.Context, empresaID int, l model.Lancamento) (model.Lancamento, error) {
 	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO lancamentos
-		 (tipo, descricao, categoria_id, conta_id, valor, data_vencimento, data_pagamento, observacoes)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		l.Tipo, l.Descricao, toNullInt(l.CategoriaID), toNullInt(l.ContaID),
+		 (empresa_id, tipo, descricao, categoria_id, conta_id, valor, data_vencimento, data_pagamento, observacoes)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		empresaID, l.Tipo, l.Descricao, toNullInt(l.CategoriaID), toNullInt(l.ContaID),
 		l.Valor, l.DataVencimento, l.DataPagamento, l.Observacoes)
 	if err != nil {
 		return model.Lancamento{}, err

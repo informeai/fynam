@@ -44,7 +44,7 @@ func (a *App) checarAtualizacaoNoInicio() {
 		return
 	}
 	if at != nil {
-		wruntime.EventsEmit(a.c(), "update:disponivel", at)
+		a.emitir("update:disponivel", at)
 	}
 }
 
@@ -91,12 +91,12 @@ func (a *App) BaixarEAplicarAtualizacao() error {
 		return nil
 	}
 
-	wruntime.EventsEmit(a.c(), "update:baixando")
+	a.emitir("update:baixando")
 	if err := a.upd.Aplicar(a.c(), at); err != nil {
-		wruntime.EventsEmit(a.c(), "update:erro", err.Error())
+		a.emitir("update:erro", err.Error())
 		return err
 	}
-	wruntime.EventsEmit(a.c(), "update:concluido", map[string]string{"versaoNova": at.VersaoNova})
+	a.emitir("update:concluido", map[string]string{"versaoNova": at.VersaoNova})
 	return nil
 }
 

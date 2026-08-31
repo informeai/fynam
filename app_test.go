@@ -9,7 +9,8 @@ import (
 	"fynam/internal/storage/sqlite"
 )
 
-// appDeTeste monta um App sobre um SQLite temporário, sem seed.
+// appDeTeste monta um App sobre um SQLite temporário, já com "Empresa
+// Principal" criada e ativa (via prepararBanco), mas sem seed de contas.
 func appDeTeste(t *testing.T) *App {
 	t.Helper()
 	st, err := sqlite.New(filepath.Join(t.TempDir(), "app.db"))
@@ -17,7 +18,31 @@ func appDeTeste(t *testing.T) *App {
 		t.Fatalf("sqlite.New: %v", err)
 	}
 	t.Cleanup(func() { st.Close() })
+	if err := prepararBanco(context.Background(), st); err != nil {
+		t.Fatalf("prepararBanco: %v", err)
+	}
+	// prepararBanco faz o seed padrão (conta + categorias); limpa para os
+	// testes começarem do zero.
+	limparEmpresaAtiva(t, st)
 	return NewApp(st)
+}
+
+func limparEmpresaAtiva(t *testing.T, st *sqlite.Store) {
+	t.Helper()
+	ctx := context.Background()
+	emps, _ := st.ListEmpresas(ctx)
+	if len(emps) == 0 {
+		return
+	}
+	id := emps[0].ID
+	contas, _ := st.ListContas(ctx, id)
+	for _, c := range contas {
+		_ = st.DeleteConta(ctx, c.ID)
+	}
+	cats, _ := st.ListCategorias(ctx, id)
+	for _, c := range cats {
+		_ = st.DeleteCategoria(ctx, c.ID)
+	}
 }
 
 func TestDashboardEDRE(t *testing.T) {
@@ -110,5 +135,66 @@ func TestFiltroPorStatusDerivado(t *testing.T) {
 	}
 	if len(atrasados) != 1 || atrasados[0].Descricao != "Conta velha" {
 		t.Fatalf("filtro status=atrasado: %+v", atrasados)
+	}
+}
+
+func TestMultiplasEmpresas(t *testing.T) {
+	a := appDeTeste(t)
+
+	// dado na Empresa Principal
+	if _, err := a.CreateConta("Caixa Principal", 100); err != nil {
+		t.Fatal(err)
+	}
+
+	// nova empresa passa a ser a ativa e vem com seed próprio
+	emp2, err := a.CriarEmpresa("Filial Sul", "12.345.678/0001-99")
+	if err != nil {
+		t.Fatalf("CriarEmpresa: %v", err)
+	}
+	ativa, _ := a.EmpresaAtiva()
+	if ativa.ID != emp2.ID {
+		t.Fatalf("CriarEmpresa devia ativar a nova empresa (%d), ativa=%d", emp2.ID, ativa.ID)
+	}
+	cats, _ := a.ListCategorias()
+	if len(cats) != 9 {
+		t.Errorf("nova empresa devia ter 9 categorias de seed, tem %d", len(cats))
+	}
+	contas, _ := a.ListContas()
+	if len(contas) != 1 || contas[0].Nome != "Caixa / Conta Principal" {
+		t.Errorf("nova empresa: contas = %+v", contas)
+	}
+
+	// dado da Empresa Principal não vaza para a Filial
+	if _, err := a.CreateLancamento(model.LancamentoInput{
+		Tipo: "pagar", Descricao: "Só da filial", Valor: 10, DataVencimento: "2026-06-01",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	empresas, _ := a.ListEmpresas()
+	var principalID int
+	for _, e := range empresas {
+		if e.Nome == "Empresa Principal" {
+			principalID = e.ID
+		}
+	}
+	if err := a.TrocarEmpresa(principalID); err != nil {
+		t.Fatalf("TrocarEmpresa: %v", err)
+	}
+	contas, _ = a.ListContas()
+	if len(contas) != 1 || contas[0].Nome != "Caixa Principal" {
+		t.Errorf("de volta na Principal: contas = %+v", contas)
+	}
+	lancs, _ := a.ListLancamentos(model.LancamentoFiltro{})
+	if len(lancs) != 0 {
+		t.Errorf("lançamento da filial vazou para a Principal: %+v", lancs)
+	}
+
+	// não pode excluir a última empresa
+	if err := a.ExcluirEmpresa(emp2.ID); err != nil {
+		t.Fatalf("ExcluirEmpresa: %v", err)
+	}
+	if err := a.ExcluirEmpresa(principalID); err == nil {
+		t.Error("ExcluirEmpresa devia recusar apagar a única empresa")
 	}
 }

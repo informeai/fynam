@@ -7,6 +7,16 @@ package model
 
 import "time"
 
+// Empresa (ou filial) é a unidade de isolamento dos dados: cada conta,
+// categoria e lançamento pertence a exatamente uma empresa. O app trabalha
+// sempre com uma empresa ativa por vez.
+type Empresa struct {
+	ID       int    `json:"id"`
+	Nome     string `json:"nome"`
+	CNPJ     string `json:"cnpj"`
+	CriadaEm string `json:"criadaEm"` // "YYYY-MM-DD"
+}
+
 // Conta bancária / caixa.
 type Conta struct {
 	ID           int     `json:"id"`

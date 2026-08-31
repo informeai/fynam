@@ -125,6 +125,36 @@ html, body {
   padding: 8px;
 }
 
+/* ---------- Seletor de empresa ---------- */
+
+.empresa-switch {
+  padding: 4px 8px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.empresa-switch label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.empresa-switch select {
+  width: 100%;
+  padding: 7px 8px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: white;
+  font-size: 13px;
+}
+
+.empresa-switch select option {
+  color: var(--text);
+}
+
 /* ---------- Content ---------- */
 
 .content {
