@@ -1,0 +1,7 @@
+{
+  "name": "fynam-frontend",
+  "private": true,
+  "version": "0.2.0",
+  "description": "Frontend estático (HTML/CSS/JS puro) do Fynam — sem etapa de build.",
+  "scripts": {}
+}

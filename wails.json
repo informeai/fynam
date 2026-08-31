@@ -1,0 +1,20 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "fynam",
+  "outputfilename": "fynam",
+  "frontend:install": "",
+  "frontend:build": "",
+  "frontend:dev:watcher": "",
+  "frontend:dev:serverUrl": "",
+  "author": {
+    "name": "informeai",
+    "email": "contato.informeai@gmail.com"
+  },
+  "info": {
+    "companyName": "Fynam",
+    "productName": "Fynam",
+    "productVersion": "0.2.0",
+    "copyright": "",
+    "comments": "Fynam — sistema de gestão financeira para desktop (Wails + Go)"
+  }
+}

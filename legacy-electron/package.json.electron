@@ -1,0 +1,37 @@
+{
+  "name": "xfin-desktop",
+  "productName": "XFin Desktop",
+  "version": "0.1.0",
+  "description": "Sistema de gestão financeira para desktop (protótipo inspirado no XFIN)",
+  "main": "main.js",
+  "author": "",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "dependencies": {
+    "lowdb": "^1.0.0"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.xfindesktop.app",
+    "productName": "XFin Desktop",
+    "files": [
+      "main.js",
+      "preload.js",
+      "db.js",
+      "renderer/**/*"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": { "target": "nsis" },
+    "mac": { "target": "dmg" },
+    "linux": { "target": "AppImage" }
+  }
+}

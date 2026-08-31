@@ -1,0 +1,10 @@
+# Binários e artefatos de build
+/build/bin/
+/fynam
+*.log
+
+# Dependências do frontend (não há build, mas por segurança)
+node_modules/
+
+# Sistema operacional
+.DS_Store

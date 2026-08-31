@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Fynam</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">F</span>
+        <span class="brand-name">Fynam<small>Gestão financeira</small></span>
+      </div>
+      <nav class="nav">
+        <button class="nav-item active" data-page="dashboard">
+          <span class="nav-ico">◆</span> Dashboard
+        </button>
+        <button class="nav-item" data-page="pagar">
+          <span class="nav-ico">↓</span> Contas a Pagar
+        </button>
+        <button class="nav-item" data-page="receber">
+          <span class="nav-ico">↑</span> Contas a Receber
+        </button>
+        <button class="nav-item" data-page="fluxo">
+          <span class="nav-ico">≋</span> Fluxo de Caixa
+        </button>
+        <button class="nav-item" data-page="dre">
+          <span class="nav-ico">▤</span> DRE
+        </button>
+        <button class="nav-item" data-page="cadastros">
+          <span class="nav-ico">⚙</span> Cadastros
+        </button>
+      </nav>
+      <div class="sidebar-footer">Wails + Go · v0.2</div>
+    </aside>
+
+    <main class="content">
+
+      <!-- ===================== DASHBOARD ===================== -->
+      <section id="page-dashboard" class="page active">
+        <header class="page-header">
+          <h1>Dashboard</h1>
+          <p class="subtitle" id="dash-hoje"></p>
+        </header>
+
+        <div class="cards">
+          <div class="card card-saldo">
+            <span class="card-label">Saldo atual</span>
+            <span class="card-value" id="card-saldo">R$ 0,00</span>
+          </div>
+          <div class="card card-receber">
+            <span class="card-label">A receber (em aberto)</span>
+            <span class="card-value" id="card-areceber">R$ 0,00</span>
+          </div>
+          <div class="card card-pagar">
+            <span class="card-label">A pagar (em aberto)</span>
+            <span class="card-value" id="card-apagar">R$ 0,00</span>
+          </div>
+        </div>
+
+        <div class="panels">
+          <div class="panel panel-chart">
+            <h2>Entradas x Saídas (últimos 6 meses)</h2>
+            <canvas id="chart-fluxo" width="640" height="280"></canvas>
+          </div>
+          <div class="panel panel-list">
+            <h2>Próximos vencimentos</h2>
+            <div id="dash-vencimentos" class="mini-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== CONTAS A PAGAR ===================== -->
+      <section id="page-pagar" class="page">
+        <header class="page-header">
+          <h1>Contas a Pagar</h1>
+          <div class="header-actions">
+            <span class="export" data-export="pagar">
+              <span class="export-label">Exportar:</span>
+              <button class="btn btn-ghost btn-export" data-fmt="pdf">PDF</button>
+              <button class="btn btn-ghost btn-export" data-fmt="xlsx">Excel</button>
+              <button class="btn btn-ghost btn-export" data-fmt="csv">CSV</button>
+            </span>
+            <button class="btn btn-primary" data-open-modal="lancamento" data-tipo="pagar">+ Nova conta a pagar</button>
+          </div>
+        </header>
+        <div class="filters" data-filters="pagar"></div>
+        <div class="table-wrap">
+          <table class="table" id="table-pagar">
+            <thead>
+              <tr>
+                <th>Descrição</th><th>Categoria</th><th>Vencimento</th>
+                <th>Valor</th><th>Status</th><th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ===================== CONTAS A RECEBER ===================== -->
+      <section id="page-receber" class="page">
+        <header class="page-header">
+          <h1>Contas a Receber</h1>
+          <div class="header-actions">
+            <span class="export" data-export="receber">
+              <span class="export-label">Exportar:</span>
+              <button class="btn btn-ghost btn-export" data-fmt="pdf">PDF</button>
+              <button class="btn btn-ghost btn-export" data-fmt="xlsx">Excel</button>
+              <button class="btn btn-ghost btn-export" data-fmt="csv">CSV</button>
+            </span>
+            <button class="btn btn-primary" data-open-modal="lancamento" data-tipo="receber">+ Nova conta a receber</button>
+          </div>
+        </header>
+        <div class="filters" data-filters="receber"></div>
+        <div class="table-wrap">
+          <table class="table" id="table-receber">
+            <thead>
+              <tr>
+                <th>Descrição</th><th>Categoria</th><th>Vencimento</th>
+                <th>Valor</th><th>Status</th><th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ===================== FLUXO DE CAIXA ===================== -->
+      <section id="page-fluxo" class="page">
+        <header class="page-header">
+          <h1>Fluxo de Caixa</h1>
+          <div class="header-actions">
+            <div class="inline-field">
+              <label for="fluxo-ano">Ano</label>
+              <select id="fluxo-ano"></select>
+            </div>
+            <span class="export" data-export="fluxo">
+              <span class="export-label">Exportar:</span>
+              <button class="btn btn-ghost btn-export" data-fmt="pdf">PDF</button>
+              <button class="btn btn-ghost btn-export" data-fmt="xlsx">Excel</button>
+              <button class="btn btn-ghost btn-export" data-fmt="csv">CSV</button>
+            </span>
+          </div>
+        </header>
+        <div class="table-wrap">
+          <table class="table" id="table-fluxo">
+            <thead>
+              <tr><th>Mês</th><th>Entradas</th><th>Saídas</th><th>Saldo do mês</th><th>Saldo acumulado</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ===================== DRE ===================== -->
+      <section id="page-dre" class="page">
+        <header class="page-header">
+          <h1>DRE simplificado</h1>
+          <div class="header-actions">
+            <div class="inline-field">
+              <label for="dre-inicio">De</label>
+              <input type="date" id="dre-inicio" />
+              <label for="dre-fim">até</label>
+              <input type="date" id="dre-fim" />
+              <button class="btn btn-secondary" id="dre-atualizar">Atualizar</button>
+            </div>
+            <span class="export" data-export="dre">
+              <span class="export-label">Exportar:</span>
+              <button class="btn btn-ghost btn-export" data-fmt="pdf">PDF</button>
+              <button class="btn btn-ghost btn-export" data-fmt="xlsx">Excel</button>
+              <button class="btn btn-ghost btn-export" data-fmt="csv">CSV</button>
+            </span>
+          </div>
+        </header>
+        <div class="dre-summary">
+          <div class="dre-box receita"><span>Receita Bruta</span><strong id="dre-receita">R$ 0,00</strong></div>
+          <div class="dre-box despesa"><span>Despesas</span><strong id="dre-despesa">R$ 0,00</strong></div>
+          <div class="dre-box resultado"><span>Resultado do Período</span><strong id="dre-resultado">R$ 0,00</strong></div>
+        </div>
+        <div class="table-wrap">
+          <table class="table" id="table-dre">
+            <thead><tr><th>Categoria</th><th>Tipo</th><th>Total</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ===================== CADASTROS ===================== -->
+      <section id="page-cadastros" class="page">
+        <header class="page-header">
+          <h1>Cadastros</h1>
+        </header>
+        <div class="panels">
+          <div class="panel">
+            <h2>Contas bancárias / Caixas</h2>
+            <form id="form-conta" class="inline-form">
+              <input type="text" id="conta-nome" placeholder="Nome da conta" required />
+              <input type="number" id="conta-saldo" placeholder="Saldo inicial" step="0.01" />
+              <button class="btn btn-secondary" type="submit">Adicionar</button>
+            </form>
+            <div id="lista-contas" class="mini-list"></div>
+          </div>
+          <div class="panel">
+            <h2>Categorias (plano de contas)</h2>
+            <form id="form-categoria" class="inline-form">
+              <input type="text" id="categoria-nome" placeholder="Nome da categoria" required />
+              <select id="categoria-tipo">
+                <option value="receita">Receita</option>
+                <option value="despesa">Despesa</option>
+              </select>
+              <button class="btn btn-secondary" type="submit">Adicionar</button>
+            </form>
+            <div id="lista-categorias" class="mini-list"></div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ===================== MODAL: novo lançamento ===================== -->
+  <div class="modal-backdrop" id="modal-lancamento">
+    <div class="modal">
+      <h2 id="modal-titulo">Novo lançamento</h2>
+      <form id="form-lancamento">
+        <input type="hidden" id="lanc-id" />
+        <input type="hidden" id="lanc-tipo" />
+
+        <label>Descrição</label>
+        <input type="text" id="lanc-descricao" required />
+
+        <label>Categoria</label>
+        <select id="lanc-categoria"></select>
+
+        <label>Conta / Caixa</label>
+        <select id="lanc-conta"></select>
+
+        <label>Valor (R$)</label>
+        <input type="number" id="lanc-valor" step="0.01" min="0" required />
+
+        <label>Vencimento</label>
+        <input type="date" id="lanc-vencimento" required />
+
+        <label>Observações</label>
+        <textarea id="lanc-obs" rows="2"></textarea>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal="lancamento">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
