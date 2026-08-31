@@ -31,7 +31,7 @@ func main() {
 	}
 	defer store.Close()
 
-	if err := seedIfEmpty(context.Background(), store, caminhoDadosLegado(dir)); err != nil {
+	if err := seedIfEmpty(context.Background(), store); err != nil {
 		log.Fatalf("falha ao preparar os dados iniciais: %v", err)
 	}
 
@@ -69,18 +69,4 @@ func appDataDir() (string, error) {
 		return "", err
 	}
 	return dir, nil
-}
-
-// caminhoDadosLegado aponta para o xfin-data.json da versão anterior
-// (Electron/lowdb ou primeira iteração Wails), para importação automática
-// na primeira execução. Procura na pasta nova e, se não achar, na antiga.
-func caminhoDadosLegado(dir string) string {
-	atual := filepath.Join(dir, "xfin-data.json")
-	if _, err := os.Stat(atual); err == nil {
-		return atual
-	}
-	if base, err := os.UserConfigDir(); err == nil {
-		return filepath.Join(base, "XFin Desktop", "xfin-data.json")
-	}
-	return atual
 }

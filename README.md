@@ -1,13 +1,8 @@
 # Fynam (protótipo)
 
-Aplicativo desktop de gestão financeira, agora reescrito com **Wails + Go**,
-inspirado no Sistema XFIN (WJR Consulting). Mantém as funcionalidades
+Aplicativo desktop de gestão financeira feito com **Wails + Go**. Funcionalidades
 essenciais: dashboard, contas a pagar, contas a receber, fluxo de caixa e
 DRE simplificado.
-
-> A versão anterior, em Electron, foi preservada na pasta
-> [`legacy-electron/`](legacy-electron/) apenas como referência. Ela não é
-> mais usada.
 
 ## Stack
 
@@ -34,10 +29,7 @@ do usuário do sistema operacional:
 | Windows | `%AppData%\Fynam\fynam.db`                    |
 | Linux   | `~/.config/Fynam/fynam.db`                    |
 
-Na primeira execução, se existir um `xfin-data.json` de uma versão anterior
-(na pasta `Fynam/` ou na pasta `XFin Desktop/` do build antigo), ele é
-**importado automaticamente** para o SQLite. Não há nenhuma comunicação com
-a internet — tudo roda localmente.
+Não há nenhuma comunicação com a internet — tudo roda localmente.
 
 ## Pré-requisitos
 
@@ -84,7 +76,7 @@ fynam/
 ├── app.go               # App struct — métodos expostos ao frontend + regra de negócio
 ├── reports.go           # DTOs de saída do dashboard e dos relatórios
 ├── export.go            # métodos ExportarX + construtores de report.Tabela
-├── seed.go              # cadastro inicial + importação do xfin-data.json legado
+├── seed.go              # cadastro inicial (1 conta + plano de contas)
 ├── helpers.go           # utilidades de data e rótulos
 ├── internal/
 │   ├── model/           # tipos de domínio (Conta, Categoria, Lancamento, ...)
@@ -99,7 +91,6 @@ fynam/
 │   ├── dist/            # interface embutida no binário (index.html, app.js, style.css)
 │   ├── package.json     # placeholder — não há build
 │   └── wailsjs/         # bindings TS/JS gerados pelo Wails (regenerados no build)
-└── legacy-electron/     # versão antiga em Electron (referência, sem uso)
 ```
 
 O binário Go é o único que lê/grava dados. A interface (`frontend/dist/`)
@@ -214,7 +205,7 @@ relatórios em `internal/report` (formatação de moeda pt-BR e saída válida
 de PDF, XLSX e CSV). Cada implementação futura de `Store` pode reaproveitar
 o mesmo estilo de teste do pacote `internal/storage/sqlite`.
 
-## O que ainda falta para virar um produto completo (como o XFIN)
+## O que ainda falta para virar um produto completo
 
 - **Múltiplas filiais** e **múltiplos usuários/permissões**
 - **Conciliação bancária** (importação de extrato OFX/CSV)
