@@ -154,10 +154,37 @@ jobs:
           New-Item -ItemType Directory -Force dist | Out-Null
           Compress-Archive -Path build/bin/fynam.exe -DestinationPath "dist/${{ matrix.asset }}"
 
+      # Instalador .msi via WiX Toolset v5 (dotnet tool, roda no runner windows-latest).
+      - name: Instalar WiX Toolset
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          wix extension add --global WixToolset.UI.wixext/5.0.2
+
+      - name: Gerar o .msi
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # ProductVersion do MSI aceita só X.Y.Z numérico — descarta sufixos semver (-rc1, +build).
+          $msiVersion = "${{ needs.prepare.outputs.version }}" -replace '[-+].*$', ''
+          wix build build/windows/wix/fynam.wxs `
+            -arch x64 `
+            -d ProductVersion=$msiVersion `
+            -d BinDir=build/bin `
+            -ext WixToolset.UI.wixext `
+            -o "dist/fynam_windows_amd64.msi"
+
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset }}
           path: dist/${{ matrix.asset }}
+
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: fynam_windows_amd64.msi
+          path: dist/fynam_windows_amd64.msi
 
   release:
     needs: [prepare, build]
