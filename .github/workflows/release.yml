@@ -9,11 +9,14 @@ name: release
 #
 # Os nomes dos assets seguem o padrão que o internal/updater (go-selfupdate)
 # espera, e um checksums.txt é gerado para a validação SHA-256 no cliente.
-# A versão é injetada em wails.json (info.productVersion) dentro do runner
-# antes de compilar, então o binário sempre bate com a release.
 #
-# Obs.: o wails.json versionado no repositório NÃO é alterado por este workflow.
-# Faça o bump + commit à parte quando quiser que o dev local reporte a nova versão.
+# No workflow_dispatch o job "prepare" faz o bump de wails.json
+# (info.productVersion) e commita "Release vX.Y.Z" no branch escolhido (main),
+# e é esse commit que vira a tag/release. No push de tag "v*" o bump é seu,
+# feito antes de criar a tag.
+#
+# Requer que o branch de destino aceite push do GITHUB_TOKEN (sem branch
+# protection exigindo PR/approvals para o github-actions[bot]).
 
 on:
   push:
@@ -34,7 +37,10 @@ jobs:
     outputs:
       version: ${{ steps.v.outputs.version }}
       tag: ${{ steps.v.outputs.tag }}
+      sha: ${{ steps.rev.outputs.sha }}
     steps:
+      - uses: actions/checkout@v4
+
       - id: v
         shell: bash
         env:
@@ -60,6 +66,24 @@ jobs:
           echo "tag=$TAG"     >> "$GITHUB_OUTPUT"
           echo "Lançando $TAG"
 
+      - id: rev
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VER="${{ steps.v.outputs.version }}"
+            node -e "const f='wails.json';const j=require('./'+f);j.info=j.info||{};j.info.productVersion='$VER';require('fs').writeFileSync(f,JSON.stringify(j,null,2)+'\n')"
+            if git diff --quiet -- wails.json; then
+              echo "wails.json já está em $VER — sem commit."
+            else
+              git config user.name  "github-actions[bot]"
+              git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+              git commit -m "Release v$VER" -- wails.json
+              git push origin "HEAD:${GITHUB_REF_NAME}"
+              echo "Bump para $VER commitado em $GITHUB_REF_NAME."
+            fi
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
   build:
     needs: prepare
     strategy:
@@ -78,6 +102,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
 
       - uses: actions/setup-go@v5
         with:
@@ -149,7 +175,7 @@ jobs:
         run: |
           target=()
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            target=(--target "$GITHUB_SHA")
+            target=(--target "${{ needs.prepare.outputs.sha }}")
           fi
           gh release create "$TAG" dist/* \
             --repo "$GITHUB_REPOSITORY" \
