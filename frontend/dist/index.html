@@ -27,8 +27,15 @@
         <span class="brand-name">Fynam<small>Gestão financeira</small></span>
       </div>
       <div class="empresa-switch">
-        <label for="empresa-atual">Empresa</label>
-        <select id="empresa-atual"></select>
+        <label>Empresa</label>
+        <div class="dd" id="dd-empresa">
+          <button type="button" class="dd-trigger" aria-haspopup="listbox" aria-expanded="false">
+            <svg class="dd-lead" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>
+            <span class="dd-value" id="empresa-value">—</span>
+            <svg class="dd-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z"/></svg>
+          </button>
+          <div class="dd-menu" role="listbox" id="empresa-menu" hidden></div>
+        </div>
       </div>
       <nav class="nav">
         <button class="nav-item active" data-page="dashboard">
@@ -97,12 +104,7 @@
         <header class="page-header">
           <h1>Contas a Pagar</h1>
           <div class="header-actions">
-            <span class="export" data-export="pagar">
-              <span class="export-label">Exportar:</span>
-              <button class="btn btn-ghost btn-export" data-fmt="pdf">PDF</button>
-              <button class="btn btn-ghost btn-export" data-fmt="xlsx">Excel</button>
-              <button class="btn btn-ghost btn-export" data-fmt="csv">CSV</button>
-            </span>
+            <div class="dd export" data-export="pagar"></div>
             <button class="btn btn-primary" data-open-modal="lancamento" data-tipo="pagar">+ Nova conta a pagar</button>
           </div>
         </header>
@@ -125,12 +127,7 @@
         <header class="page-header">
           <h1>Contas a Receber</h1>
           <div class="header-actions">
-            <span class="export" data-export="receber">
-              <span class="export-label">Exportar:</span>
-              <button class="btn btn-ghost btn-export" data-fmt="pdf">PDF</button>
-              <button class="btn btn-ghost btn-export" data-fmt="xlsx">Excel</button>
-              <button class="btn btn-ghost btn-export" data-fmt="csv">CSV</button>
-            </span>
+            <div class="dd export" data-export="receber"></div>
             <button class="btn btn-primary" data-open-modal="lancamento" data-tipo="receber">+ Nova conta a receber</button>
           </div>
         </header>
@@ -157,12 +154,7 @@
               <label for="fluxo-ano">Ano</label>
               <select id="fluxo-ano"></select>
             </div>
-            <span class="export" data-export="fluxo">
-              <span class="export-label">Exportar:</span>
-              <button class="btn btn-ghost btn-export" data-fmt="pdf">PDF</button>
-              <button class="btn btn-ghost btn-export" data-fmt="xlsx">Excel</button>
-              <button class="btn btn-ghost btn-export" data-fmt="csv">CSV</button>
-            </span>
+            <div class="dd export" data-export="fluxo"></div>
           </div>
         </header>
         <div class="table-wrap">
@@ -180,19 +172,26 @@
         <header class="page-header">
           <h1>DRE simplificado</h1>
           <div class="header-actions">
-            <div class="inline-field">
-              <label for="dre-inicio">De</label>
-              <input type="date" id="dre-inicio" />
-              <label for="dre-fim">até</label>
-              <input type="date" id="dre-fim" />
-              <button class="btn btn-secondary" id="dre-atualizar">Atualizar</button>
+            <div class="dd" id="dd-periodo">
+              <button type="button" class="dd-trigger" aria-haspopup="menu" aria-expanded="false">
+                <svg class="dd-lead" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zM5 8V6h14v2H5z"/></svg>
+                <span class="dd-txt" id="periodo-label">Este mês</span>
+                <svg class="dd-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z"/></svg>
+              </button>
+              <div class="dd-menu" role="menu" hidden>
+                <button type="button" class="dd-item" role="menuitem" data-preset="mes">Este mês</button>
+                <button type="button" class="dd-item" role="menuitem" data-preset="mes-1">Mês passado</button>
+                <button type="button" class="dd-item" role="menuitem" data-preset="3m">Últimos 3 meses</button>
+                <button type="button" class="dd-item" role="menuitem" data-preset="ano">Este ano</button>
+                <div class="dd-sep"></div>
+                <div class="dd-range">
+                  <label>De <input type="date" id="dre-inicio" /></label>
+                  <label>Até <input type="date" id="dre-fim" /></label>
+                  <button type="button" class="btn btn-secondary" id="dre-aplicar">Aplicar intervalo</button>
+                </div>
+              </div>
             </div>
-            <span class="export" data-export="dre">
-              <span class="export-label">Exportar:</span>
-              <button class="btn btn-ghost btn-export" data-fmt="pdf">PDF</button>
-              <button class="btn btn-ghost btn-export" data-fmt="xlsx">Excel</button>
-              <button class="btn btn-ghost btn-export" data-fmt="csv">CSV</button>
-            </span>
+            <div class="dd export" data-export="dre"></div>
           </div>
         </header>
         <div class="dre-summary">

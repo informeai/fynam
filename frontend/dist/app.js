@@ -14,6 +14,39 @@
     filtroReceber: 'todos'
   };
 
+  let ddEmpresa = null;
+  let ddPeriodo = null;
+
+  // Dropdown genérico: abre/fecha, fecha ao clicar fora ou com Esc, e só um
+  // aberto por vez. Devolve { open, close, trigger, menu }.
+  function initDropdown(root) {
+    const trigger = root.querySelector('.dd-trigger');
+    const menu = root.querySelector('.dd-menu');
+    const close = () => {
+      root.dataset.open = 'false';
+      menu.hidden = true;
+      trigger.setAttribute('aria-expanded', 'false');
+    };
+    const open = () => {
+      document.querySelectorAll('.dd[data-open="true"]').forEach((d) => {
+        if (d !== root && d.__dd) d.__dd.close();
+      });
+      root.dataset.open = 'true';
+      menu.hidden = false;
+      trigger.setAttribute('aria-expanded', 'true');
+    };
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      root.dataset.open === 'true' ? close() : open();
+    });
+    menu.addEventListener('click', (e) => e.stopPropagation());
+    document.addEventListener('click', close);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+    close();
+    root.__dd = { open, close, trigger, menu };
+    return root.__dd;
+  }
+
   const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
   const fmtMoney = (v) => currency.format(v || 0);
   const fmtDate = (iso) => {
@@ -60,13 +93,7 @@
   // ---------------------------------------------------------------
 
   function setupEmpresas() {
-    document.getElementById('empresa-atual').addEventListener('change', async (e) => {
-      try {
-        await App.TrocarEmpresa(Number(e.target.value));
-      } catch (err) {
-        toast('Não foi possível trocar de empresa: ' + err, true);
-      }
-    });
+    ddEmpresa = initDropdown(document.getElementById('dd-empresa'));
 
     document.getElementById('form-empresa').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -92,11 +119,27 @@
     const ativa = await App.EmpresaAtiva();
     state.empresaAtivaId = ativa.id;
 
-    const sel = document.getElementById('empresa-atual');
-    sel.innerHTML = state.empresas
-      .map((e) => `<option value="${e.id}">${escapeHtml(e.nome)}</option>`)
-      .join('');
-    sel.value = String(ativa.id);
+    const ativaNome = (state.empresas.find((e) => e.id === ativa.id) || {}).nome;
+    document.getElementById('empresa-value').textContent = ativaNome || '—';
+
+    const menu = document.getElementById('empresa-menu');
+    menu.innerHTML = state.empresas.map((e) => `
+      <button type="button" class="dd-item" role="option" data-id="${e.id}" aria-selected="${e.id === ativa.id}">
+        <span class="dd-name">${escapeHtml(e.nome)}</span>
+        <svg class="dd-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
+      </button>`).join('');
+    menu.querySelectorAll('.dd-item').forEach((it) => {
+      it.addEventListener('click', async () => {
+        ddEmpresa.close();
+        const id = Number(it.dataset.id);
+        if (id === state.empresaAtivaId) return;
+        try {
+          await App.TrocarEmpresa(id);
+        } catch (err) {
+          toast('Não foi possível trocar de empresa: ' + err, true);
+        }
+      });
+    });
 
     const lista = document.getElementById('lista-empresas');
     if (!lista) return;
@@ -500,12 +543,62 @@
   // DRE
   // ---------------------------------------------------------------
 
+  // Presets do seletor de período da DRE. range() -> [inicio: Date, fim: Date].
+  const DRE_PRESETS = {
+    'mes': {
+      label: 'Este mês',
+      range: () => { const h = new Date(); return [new Date(h.getFullYear(), h.getMonth(), 1), h]; }
+    },
+    'mes-1': {
+      label: 'Mês passado',
+      range: () => {
+        const h = new Date();
+        return [new Date(h.getFullYear(), h.getMonth() - 1, 1), new Date(h.getFullYear(), h.getMonth(), 0)];
+      }
+    },
+    '3m': {
+      label: 'Últimos 3 meses',
+      range: () => { const h = new Date(); return [new Date(h.getFullYear(), h.getMonth() - 2, 1), h]; }
+    },
+    'ano': {
+      label: 'Este ano',
+      range: () => { const h = new Date(); return [new Date(h.getFullYear(), 0, 1), h]; }
+    }
+  };
+
+  function setDrePeriodo(dataInicio, dataFim, rotulo) {
+    document.getElementById('dre-inicio').value = dataInicio;
+    document.getElementById('dre-fim').value = dataFim;
+    document.getElementById('periodo-label').textContent = rotulo;
+  }
+
+  function aplicarPreset(chave) {
+    const p = DRE_PRESETS[chave];
+    const [ini, fim] = p.range();
+    setDrePeriodo(isoDate(ini), isoDate(fim), p.label);
+  }
+
   function setupDre() {
-    const hoje = new Date();
-    const inicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-    document.getElementById('dre-inicio').value = isoDate(inicio);
-    document.getElementById('dre-fim').value = isoDate(hoje);
-    document.getElementById('dre-atualizar').addEventListener('click', loadDre);
+    ddPeriodo = initDropdown(document.getElementById('dd-periodo'));
+
+    document.querySelectorAll('#dd-periodo [data-preset]').forEach((b) => {
+      b.addEventListener('click', () => {
+        aplicarPreset(b.dataset.preset);
+        ddPeriodo.close();
+        loadDre();
+      });
+    });
+
+    document.getElementById('dre-aplicar').addEventListener('click', () => {
+      const ini = document.getElementById('dre-inicio').value;
+      const fim = document.getElementById('dre-fim').value;
+      if (!ini || !fim) { toast('Informe as duas datas do intervalo.', true); return; }
+      document.getElementById('periodo-label').textContent = `${fmtDate(ini)} – ${fmtDate(fim)}`;
+      ddPeriodo.close();
+      loadDre();
+    });
+
+    aplicarPreset('mes');
   }
 
   function isoDate(d) {
@@ -611,20 +704,44 @@
   // Exportação de relatórios (PDF / Excel / CSV)
   // ---------------------------------------------------------------
 
+  const EXPORT_ICO = 'M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z';
+  const EXPORT_FMTS = [
+    { fmt: 'pdf', nome: 'PDF', ico: 'M6 2c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6H6zm7 7V3.5L18.5 9H13z' },
+    { fmt: 'xlsx', nome: 'Excel', ico: 'M4 4h16v16H4V4zm2 2v3h5V6H6zm7 0v3h5V6h-5zm-7 5v3h5v-3H6zm7 0v3h5v-3h-5zm-7 5v2h5v-2H6zm7 0v2h5v-2h-5z' },
+    { fmt: 'csv', nome: 'CSV', ico: 'M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z' }
+  ];
+
   function setupExport() {
-    document.querySelectorAll('.export').forEach((grupo) => {
-      const alvo = grupo.dataset.export;
-      grupo.querySelectorAll('.btn-export').forEach((btn) => {
-        btn.addEventListener('click', () => exportar(alvo, btn.dataset.fmt, btn));
+    document.querySelectorAll('.export').forEach((root) => {
+      const alvo = root.dataset.export;
+      root.innerHTML = `
+        <button type="button" class="dd-trigger" aria-haspopup="menu" aria-expanded="false">
+          <svg class="dd-lead" viewBox="0 0 24 24" aria-hidden="true"><path d="${EXPORT_ICO}"/></svg>
+          <span class="dd-txt">Exportar</span>
+          <svg class="dd-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z"/></svg>
+        </button>
+        <div class="dd-menu right" role="menu" hidden>
+          ${EXPORT_FMTS.map((f) => `
+            <button type="button" class="dd-item" role="menuitem" data-fmt="${f.fmt}">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${f.ico}"/></svg>${f.nome}
+            </button>`).join('')}
+        </div>`;
+      const dd = initDropdown(root);
+      root.querySelectorAll('.dd-item').forEach((it) => {
+        it.addEventListener('click', () => {
+          dd.close();
+          exportar(alvo, it.dataset.fmt, root);
+        });
       });
     });
   }
 
-  async function exportar(alvo, fmt, btn) {
-    const grupo = btn.closest('.export');
-    grupo.querySelectorAll('.btn-export').forEach((b) => (b.disabled = true));
-    const rotulo = btn.textContent;
-    btn.textContent = '…';
+  async function exportar(alvo, fmt, root) {
+    const trigger = root.querySelector('.dd-trigger');
+    const txt = root.querySelector('.dd-txt');
+    const rotulo = txt.textContent;
+    trigger.disabled = true;
+    txt.textContent = 'Exportando…';
     try {
       let caminho = '';
       if (alvo === 'fluxo') {
@@ -646,8 +763,8 @@
     } catch (err) {
       toast('Falha ao exportar: ' + err, true);
     } finally {
-      btn.textContent = rotulo;
-      grupo.querySelectorAll('.btn-export').forEach((b) => (b.disabled = false));
+      txt.textContent = rotulo;
+      trigger.disabled = false;
     }
   }
 
