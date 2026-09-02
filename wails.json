@@ -13,7 +13,7 @@
   "info": {
     "companyName": "Fynam",
     "productName": "Fynam",
-    "productVersion": "0.2.0",
+    "productVersion": "1.0.0",
     "copyright": "",
     "comments": "Fynam — sistema de gestão financeira para desktop (Wails + Go)"
   }
