@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Origem do instalador MSI do Fynam (WiX Toolset v5).
+
+  Compilado no runner de release com:
+
+    wix build build/windows/wix/fynam.wxs `
+      -arch x64 `
+      -d ProductVersion=<versao-numerica> `
+      -d BinDir=build/bin `
+      -ext WixToolset.UI.wixext `
+      -o dist/fynam_windows_amd64.msi
+
+  Requer o binário já compilado em <BinDir>/fynam.exe (wails build).
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+  <?ifndef ProductVersion ?><?define ProductVersion = "0.0.0" ?><?endif ?>
+  <?ifndef BinDir ?><?define BinDir = "build/bin" ?><?endif ?>
+
+  <Package Name="Fynam"
+           Manufacturer="Fynam"
+           Version="$(var.ProductVersion)"
+           UpgradeCode="849E3006-A108-41DC-9949-4CBAD5CB2BDE"
+           Scope="perMachine"
+           Compressed="yes">
+
+    <SummaryInformation Description="Fynam — sistema de gestão financeira para desktop" />
+
+    <MajorUpgrade DowngradeErrorMessage="Uma versão mais recente do Fynam já está instalada." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="fynam.ico" SourceFile="build/windows/icon.ico" />
+    <Property Id="ARPPRODUCTICON" Value="fynam.ico" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Fynam" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="AppMenuFolder" Name="Fynam" />
+    </StandardDirectory>
+    <StandardDirectory Id="DesktopFolder" />
+
+    <Component Id="MainExecutable" Directory="INSTALLFOLDER" Bitness="always64">
+      <File Id="fynam.exe" Source="$(var.BinDir)/fynam.exe" KeyPath="yes">
+        <Shortcut Id="StartMenuShortcut"
+                  Directory="AppMenuFolder"
+                  Name="Fynam"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="fynam.ico"
+                  Advertise="yes" />
+        <Shortcut Id="DesktopShortcut"
+                  Directory="DesktopFolder"
+                  Name="Fynam"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="fynam.ico"
+                  Advertise="yes" />
+      </File>
+    </Component>
+
+    <Component Id="AppMenuFolderCleanup" Directory="AppMenuFolder" Guid="2826D9BF-4812-4A04-BE23-EED5A6B32729">
+      <RemoveFolder Id="AppMenuFolder" On="uninstall" />
+      <RegistryValue Root="HKCU" Key="Software\Fynam\Fynam" Name="installed"
+                     Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <Feature Id="Main" Title="Fynam" Level="1">
+      <ComponentRef Id="MainExecutable" />
+      <ComponentRef Id="AppMenuFolderCleanup" />
+    </Feature>
+
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <WixVariable Id="WixUILicenseRtf" Value="build/windows/wix/license.rtf" />
+
+  </Package>
+</Wix>

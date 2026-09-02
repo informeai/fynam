@@ -229,7 +229,9 @@ o evento `update:disponivel` e o frontend mostra um banner
 macOS (universal) / Windows / Linux, gera `checksums.txt` e cria a Release
 com os assets nos nomes que o updater espera
 (`fynam_darwin_universal.tar.gz`, `fynam_windows_amd64.zip`,
-`fynam_linux_amd64.tar.gz`).
+`fynam_linux_amd64.tar.gz`). No Windows também é gerado o instalador
+`fynam_windows_amd64.msi` (WiX Toolset v5, origem em `build/windows/wix/`);
+ele serve para a instalação inicial — o updater continua consumindo o `.zip`.
 
 > **macOS:** o updater troca só o binário `fynam.app/Contents/MacOS/fynam`.
 > Funciona para o app não-assinado atual; para distribuição séria, o ideal
