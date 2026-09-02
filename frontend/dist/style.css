@@ -142,18 +142,48 @@ html, body {
   color: #64748b;
 }
 
-.empresa-switch select {
+.empresa-switch .dd { display: block; }
+
+.empresa-switch .dd-trigger {
   width: 100%;
-  padding: 7px 8px;
-  border-radius: 7px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  justify-content: flex-start;
+  padding: 8px 10px;
+  border-color: rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.06);
-  color: white;
-  font-size: 13px;
+  color: #fff;
 }
 
-.empresa-switch select option {
-  color: var(--text);
+.empresa-switch .dd-trigger:hover { border-color: rgba(255, 255, 255, 0.3); }
+.empresa-switch .dd-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+/* menu preso à largura do gatilho — o .app tem overflow:hidden */
+.empresa-switch .dd-menu {
+  left: 0;
+  right: 0;
+  min-width: 0;
+}
+.empresa-switch .dd-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dd-check {
+  display: none;
+  fill: var(--accent-dark);
+}
+.dd-item[aria-selected="true"] .dd-check {
+  display: block;
+  flex-shrink: 0;
 }
 
 /* ---------- Content ---------- */
@@ -504,45 +534,151 @@ html, body {
   margin-top: 18px;
 }
 
-/* ---------- Exportação de relatórios ---------- */
+/* ---------- Header actions ---------- */
 
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
-.export {
+/* ---------- Dropdown / menu (empresa, exportar, período) ---------- */
+
+.dd {
+  position: relative;
+  display: inline-block;
+}
+
+.dd-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  padding: 8px 12px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
 }
 
-.export-label {
+.dd-trigger:hover:not(:disabled) { border-color: var(--accent); }
+.dd-trigger:disabled { opacity: 0.6; cursor: default; }
+.dd-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.dd-lead {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+.dd-caret {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  opacity: 0.45;
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.dd[data-open="true"] .dd-caret { transform: rotate(180deg); }
+
+.dd-menu {
+  position: absolute;
+  z-index: 40;
+  top: 100%;
+  left: 0;
+  margin-top: 6px;
+  min-width: 100%;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14), 0 2px 8px rgba(15, 23, 42, 0.08);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dd-menu.right {
+  left: auto;
+  right: 0;
+}
+
+.dd-menu[hidden] { display: none; }
+
+.dd-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dd-item:hover { background: #f1f5f9; }
+.dd-item[aria-selected="true"] {
+  color: var(--accent-dark);
+  font-weight: 600;
+}
+
+.dd-item > svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.dd-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 2px;
+}
+
+.dd-range {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 10px 8px;
+  min-width: 240px;
+}
+
+.dd-range label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   font-size: 12px;
   color: var(--text-muted);
-  margin-right: 2px;
 }
 
-.btn-export {
+.dd-range input[type="date"] {
+  padding: 6px 8px;
   border: 1px solid var(--border);
-  background: white;
-  color: var(--text-muted);
-  padding: 6px 12px;
-  font-size: 12.5px;
-  border-radius: 8px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
 }
 
-.btn-export:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.btn-export:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
+.dd-range .btn { margin-top: 2px; }
 
 /* ---------- Toast ---------- */
 
