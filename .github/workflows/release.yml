@@ -93,12 +93,16 @@ jobs:
           - os: macos-14
             platform: darwin/universal
             asset: fynam_darwin_universal.tar.gz
+            buildflags: ""
           - os: windows-latest
             platform: windows/amd64
             asset: fynam_windows_amd64.zip
+            buildflags: ""
           - os: ubuntu-latest
             platform: linux/amd64
             asset: fynam_linux_amd64.tar.gz
+            # Ubuntu 24.04 só tem webkit2gtk-4.1; a tag faz o Wails compilar contra ela.
+            buildflags: "-tags webkit2_41"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -127,7 +131,7 @@ jobs:
           cat wails.json
 
       - name: Build
-        run: wails build -platform ${{ matrix.platform }} -trimpath
+        run: wails build -platform ${{ matrix.platform }} -trimpath ${{ matrix.buildflags }}
 
       - name: Empacotar (macOS)
         if: runner.os == 'macOS'
