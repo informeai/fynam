@@ -2,11 +2,11 @@
 
 :root {
   --bg: #f4f6f9;
-  --sidebar-bg: #14213d;
-  --sidebar-fg: #cbd5e1;
-  --sidebar-active: #1f2f57;
-  --accent: #2563eb;
-  --accent-dark: #1d4ed8;
+  --sidebar-bg: #0a3a22;
+  --sidebar-fg: #b8d0c4;
+  --sidebar-active: #125639;
+  --accent: #0b8a47;
+  --accent-dark: #097a3e;
   --green: #16a34a;
   --green-bg: #ecfdf3;
   --red: #dc2626;
@@ -62,12 +62,9 @@ html, body {
   width: 30px;
   height: 30px;
   border-radius: 8px;
-  background: var(--accent);
-  color: white;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: block;
 }
 
 .brand-name {
@@ -105,10 +102,14 @@ html, body {
 }
 
 .nav-ico {
-  width: 16px;
-  text-align: center;
-  opacity: 0.8;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  fill: currentColor;
+  opacity: 0.75;
 }
+
+.nav-item.active .nav-ico { opacity: 1; }
 
 .nav-item:hover {
   background: rgba(255, 255, 255, 0.06);
@@ -383,8 +384,8 @@ html, body {
 .btn-primary { background: var(--accent); color: white; }
 .btn-primary:hover { background: var(--accent-dark); }
 
-.btn-secondary { background: #eef2ff; color: var(--accent-dark); }
-.btn-secondary:hover { background: #e0e7ff; }
+.btn-secondary { background: #e7f6ee; color: var(--accent-dark); }
+.btn-secondary:hover { background: #d7efe1; }
 
 .btn-ghost { background: transparent; color: var(--text-muted); }
 .btn-ghost:hover { color: var(--text); }
