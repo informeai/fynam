@@ -1,0 +1,20 @@
+<svg width="1024" height="1024" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Fynam app icon — direction A "Grow": geometric F with a rising top arm -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#22C06D"/>
+      <stop offset="1" stop-color="#0B8A47"/>
+    </linearGradient>
+    <radialGradient id="hi" cx="28%" cy="22%" r="75%">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <rect width="512" height="512" fill="url(#hi)"/>
+  <g fill="none" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round" transform="translate(-18 14)">
+    <path d="M196 140 V374" stroke-width="54"/>
+    <path d="M196 172 H286 L364 100" stroke-width="50"/>
+    <path d="M196 258 H278" stroke-width="48"/>
+  </g>
+</svg>

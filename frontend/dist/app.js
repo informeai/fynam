@@ -123,11 +123,13 @@
 
   async function editarEmpresa(id) {
     const emp = state.empresas.find((e) => e.id === id);
-    const nome = prompt('Nome da empresa:', emp ? emp.nome : '');
+    const nome = await askText('Renomear empresa', 'Nome da empresa', emp ? emp.nome : '');
     if (nome === null) return;
-    const cnpj = prompt('CNPJ (opcional):', emp ? emp.cnpj : '') || '';
+    const cnpj = await askText('Renomear empresa', 'CNPJ (opcional)', emp ? emp.cnpj : '');
+    if (cnpj === null) return;
     try {
       await App.AtualizarEmpresa(id, nome.trim(), cnpj.trim());
+      toast('Empresa atualizada.');
       carregarEmpresas();
     } catch (err) {
       toast('Falha ao atualizar: ' + err, true);
@@ -136,7 +138,12 @@
 
   async function excluirEmpresa(id) {
     const emp = state.empresas.find((e) => e.id === id);
-    if (!confirm(`Excluir "${emp ? emp.nome : 'esta empresa'}" e TODOS os seus dados (contas, categorias, lançamentos)?`)) return;
+    const ok = await askConfirm(
+      'Excluir empresa',
+      `Excluir "${emp ? emp.nome : 'esta empresa'}" e TODOS os seus dados (contas, categorias, lançamentos)?`,
+      'Excluir'
+    );
+    if (!ok) return;
     try {
       await App.ExcluirEmpresa(id);
       toast('Empresa excluída.');
@@ -332,7 +339,9 @@
         if (action === 'baixar') await App.MarcarBaixa(id, '');
         if (action === 'estornar') await App.Estornar(id);
         if (action === 'excluir') {
-          if (confirm('Excluir este lançamento?')) await App.DeleteLancamento(id);
+          if (await askConfirm('Excluir lançamento', 'Excluir este lançamento?', 'Excluir')) {
+            await App.DeleteLancamento(id);
+          }
         }
         if (action === 'editar') return openModalLancamento(btn.dataset.tipo, id);
         loadLancamentos(tipo);
@@ -411,6 +420,51 @@
 
   function openModal(name) { document.getElementById(`modal-${name}`).classList.add('open'); }
   function closeModal(name) { document.getElementById(`modal-${name}`).classList.remove('open'); }
+
+  // Diálogos em DOM — o WKWebView do macOS não implementa window.prompt/confirm,
+  // então esses helpers os substituem devolvendo uma Promise.
+  function askDialog({ title, message = '', input = false, value = '', label = 'Valor', okText = 'Confirmar', danger = false }) {
+    return new Promise((resolve) => {
+      const backdrop = document.getElementById('modal-ask');
+      const field = document.getElementById('ask-field');
+      const inp = document.getElementById('ask-input');
+      const okBtn = document.getElementById('ask-ok');
+      const cancelBtn = document.getElementById('ask-cancel');
+      const msgEl = document.getElementById('ask-message');
+
+      document.getElementById('ask-title').textContent = title;
+      msgEl.textContent = message;
+      msgEl.style.display = message ? 'block' : 'none';
+      document.getElementById('ask-label').textContent = label;
+      field.style.display = input ? 'flex' : 'none';
+      inp.value = value || '';
+      okBtn.textContent = okText;
+      okBtn.style.background = danger ? 'var(--red)' : '';
+
+      const done = (result) => {
+        backdrop.classList.remove('open');
+        okBtn.removeEventListener('click', onOk);
+        cancelBtn.removeEventListener('click', onCancel);
+        document.removeEventListener('keydown', onKey);
+        resolve(result);
+      };
+      const onOk = () => done(input ? inp.value : true);
+      const onCancel = () => done(input ? null : false);
+      const onKey = (e) => {
+        if (e.key === 'Escape') onCancel();
+        else if (e.key === 'Enter' && input) onOk();
+      };
+
+      okBtn.addEventListener('click', onOk);
+      cancelBtn.addEventListener('click', onCancel);
+      document.addEventListener('keydown', onKey);
+      backdrop.classList.add('open');
+      if (input) setTimeout(() => { inp.focus(); inp.select(); }, 30);
+    });
+  }
+
+  const askText = (title, label, value) => askDialog({ title, label, value, input: true });
+  const askConfirm = (title, message, okText = 'Confirmar') => askDialog({ title, message, okText, danger: true });
 
   // ---------------------------------------------------------------
   // Fluxo de caixa
@@ -711,6 +765,15 @@
   // Boot
   // ---------------------------------------------------------------
 
+  async function mostrarVersao() {
+    const el = document.getElementById('sidebar-versao');
+    if (!el) return;
+    try {
+      const v = await App.VersaoAtual();
+      if (v) el.textContent = 'v' + v;
+    } catch (_) { /* mantém o texto padrão */ }
+  }
+
   async function boot() {
     setupNav();
     setupFiltros();
@@ -721,6 +784,7 @@
     setupExport();
     setupUpdate();
     setupEmpresas();
+    mostrarVersao();
     await carregarEmpresas();
     await refreshCategoriasEContas();
     await loadDashboard();

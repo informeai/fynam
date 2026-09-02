@@ -10,7 +10,20 @@
   <div class="app">
     <aside class="sidebar">
       <div class="brand">
-        <span class="brand-mark">F</span>
+        <svg class="brand-mark" viewBox="0 0 512 512" role="img" aria-label="Fynam">
+          <defs>
+            <linearGradient id="bm-bg" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#22c06d" />
+              <stop offset="1" stop-color="#0b8a47" />
+            </linearGradient>
+          </defs>
+          <rect width="512" height="512" fill="url(#bm-bg)" />
+          <g fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" transform="translate(-18 14)">
+            <path d="M196 140 V374" stroke-width="54" />
+            <path d="M196 172 H286 L364 100" stroke-width="50" />
+            <path d="M196 258 H278" stroke-width="48" />
+          </g>
+        </svg>
         <span class="brand-name">Fynam<small>Gestão financeira</small></span>
       </div>
       <div class="empresa-switch">
@@ -19,28 +32,28 @@
       </div>
       <nav class="nav">
         <button class="nav-item active" data-page="dashboard">
-          <span class="nav-ico">◆</span> Dashboard
+          <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg> Dashboard
         </button>
         <button class="nav-item" data-page="pagar">
-          <span class="nav-ico">↓</span> Contas a Pagar
+          <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4c4.41 0 8 3.59 8 8s-3.59 8-8 8-8-3.59-8-8 3.59-8 8-8m0-2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 10V8h-2v4H8l4 4 4-4h-3z"/></svg> Contas a Pagar
         </button>
         <button class="nav-item" data-page="receber">
-          <span class="nav-ico">↑</span> Contas a Receber
+          <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8m0 2c5.52 0 10-4.48 10-10S17.52 2 12 2 2 6.48 2 12s4.48 10 10 10zm-1-10v4h2v-4h3l-4-4-4 4h3z"/></svg> Contas a Receber
         </button>
         <button class="nav-item" data-page="fluxo">
-          <span class="nav-ico">≋</span> Fluxo de Caixa
+          <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 4h3v16h-3zM3 13h3v7H3zm11-9h3v3h-3zm-4 1h3v4h-3zm-3 5h3v4H7z"/></svg> Fluxo de Caixa
         </button>
         <button class="nav-item" data-page="dre">
-          <span class="nav-ico">▤</span> DRE
+          <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg> DRE
         </button>
         <button class="nav-item" data-page="empresas">
-          <span class="nav-ico">▦</span> Empresas
+          <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg> Empresas
         </button>
         <button class="nav-item" data-page="cadastros">
-          <span class="nav-ico">⚙</span> Cadastros
+          <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 5v14H5V5h14m1.1-2H3.9c-.5 0-.9.4-.9.9v16.2c0 .4.4.9.9.9h16.2c.4 0 .9-.5.9-.9V3.9c0-.5-.5-.9-.9-.9zM11 7h6v2h-6V7zm0 4h6v2h-6v-2zm0 4h6v2h-6zM7 7h2v2H7zm0 4h2v2H7zm0 4h2v2H7z"/></svg> Cadastros
         </button>
       </nav>
-      <div class="sidebar-footer">Wails + Go</div>
+      <div class="sidebar-footer" id="sidebar-versao">Fynam</div>
     </aside>
 
     <main class="content">
@@ -285,6 +298,23 @@
           <button type="submit" class="btn btn-primary">Salvar</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL: pergunta / confirmação ===================== -->
+  <!-- Substitui window.prompt/confirm, que o WKWebView do macOS não implementa. -->
+  <div class="modal-backdrop" id="modal-ask">
+    <div class="modal" style="width: 380px;">
+      <h2 id="ask-title">Confirmar</h2>
+      <p id="ask-message" class="subtitle" style="margin: 0 0 12px;"></p>
+      <div id="ask-field" style="display: none; flex-direction: column; gap: 4px;">
+        <label id="ask-label" for="ask-input">Valor</label>
+        <input id="ask-input" type="text" autocomplete="off" style="width: 100%;" />
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="ask-cancel">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="ask-ok">Confirmar</button>
+      </div>
     </div>
   </div>
 
