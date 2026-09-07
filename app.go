@@ -110,12 +110,18 @@ func (a *App) ListContas() ([]model.Conta, error) {
 	return a.store.ListContas(a.c(), a.empresa())
 }
 
-func (a *App) CreateConta(nome string, saldoInicial float64) (model.Conta, error) {
-	return a.store.CreateConta(a.c(), a.empresa(), model.Conta{Nome: nome, SaldoInicial: saldoInicial})
+func (a *App) CreateConta(nome string, saldoInicial float64, bankID, acctID, acctType string) (model.Conta, error) {
+	return a.store.CreateConta(a.c(), a.empresa(), model.Conta{
+		Nome: nome, SaldoInicial: saldoInicial,
+		BankID: bankID, AcctID: acctID, AcctType: acctType,
+	})
 }
 
-func (a *App) UpdateConta(id int, nome string, saldoInicial float64) (model.Conta, error) {
-	return a.store.UpdateConta(a.c(), model.Conta{ID: id, Nome: nome, SaldoInicial: saldoInicial})
+func (a *App) UpdateConta(id int, nome string, saldoInicial float64, bankID, acctID, acctType string) (model.Conta, error) {
+	return a.store.UpdateConta(a.c(), model.Conta{
+		ID: id, Nome: nome, SaldoInicial: saldoInicial,
+		BankID: bankID, AcctID: acctID, AcctType: acctType,
+	})
 }
 
 func (a *App) DeleteConta(id int) error {
@@ -160,7 +166,19 @@ func (a *App) ListLancamentos(filtro model.LancamentoFiltro) ([]model.Lancamento
 	return out, nil
 }
 
+// validarLancamentoInput garante as regras que independem do backend de
+// persistência. Hoje: todo lançamento pertence a uma conta/caixa.
+func validarLancamentoInput(in model.LancamentoInput) error {
+	if in.ContaID == nil {
+		return errors.New("selecione a conta / caixa do lançamento")
+	}
+	return nil
+}
+
 func (a *App) CreateLancamento(in model.LancamentoInput) (model.Lancamento, error) {
+	if err := validarLancamentoInput(in); err != nil {
+		return model.Lancamento{}, err
+	}
 	l := model.Lancamento{
 		Tipo:           in.Tipo,
 		Descricao:      in.Descricao,
@@ -179,6 +197,9 @@ func (a *App) CreateLancamento(in model.LancamentoInput) (model.Lancamento, erro
 }
 
 func (a *App) UpdateLancamento(id int, in model.LancamentoInput) (model.Lancamento, error) {
+	if err := validarLancamentoInput(in); err != nil {
+		return model.Lancamento{}, err
+	}
 	atual, err := a.store.GetLancamento(a.c(), id)
 	if err != nil {
 		return model.Lancamento{}, err

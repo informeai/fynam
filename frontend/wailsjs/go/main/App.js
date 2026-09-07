@@ -18,8 +18,8 @@ export function CreateCategoria(arg1, arg2) {
   return window['go']['main']['App']['CreateCategoria'](arg1, arg2);
 }
 
-export function CreateConta(arg1, arg2) {
-  return window['go']['main']['App']['CreateConta'](arg1, arg2);
+export function CreateConta(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['CreateConta'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function CreateLancamento(arg1) {
@@ -110,8 +110,8 @@ export function TrocarEmpresa(arg1) {
   return window['go']['main']['App']['TrocarEmpresa'](arg1);
 }
 
-export function UpdateConta(arg1, arg2, arg3) {
-  return window['go']['main']['App']['UpdateConta'](arg1, arg2, arg3);
+export function UpdateConta(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['UpdateConta'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
 export function UpdateLancamento(arg1, arg2) {

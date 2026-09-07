@@ -281,5 +281,70 @@ func TestConciliacao(t *testing.T) {
 	}
 }
 
+func TestContaIdentificadoresBancarios(t *testing.T) {
+	ctx := context.Background()
+	s := novoStore(t)
+	emp := novaEmpresa(t, s, "Empresa A")
+
+	c, err := s.CreateConta(ctx, emp, model.Conta{
+		Nome: "Banco X", SaldoInicial: 0,
+		BankID: "001", AcctID: "12345-6", AcctType: "CHECKING",
+	})
+	if err != nil {
+		t.Fatalf("CreateConta: %v", err)
+	}
+
+	got, err := s.GetConta(ctx, c.ID)
+	if err != nil {
+		t.Fatalf("GetConta: %v", err)
+	}
+	if got.BankID != "001" || got.AcctID != "12345-6" || got.AcctType != "CHECKING" {
+		t.Fatalf("identificadores não persistiram: %+v", got)
+	}
+
+	got.AcctType = "SAVINGS"
+	if _, err := s.UpdateConta(ctx, got); err != nil {
+		t.Fatalf("UpdateConta: %v", err)
+	}
+	if again, _ := s.GetConta(ctx, c.ID); again.AcctType != "SAVINGS" {
+		t.Fatalf("UpdateConta não gravou acct_type: %+v", again)
+	}
+
+	lista, _ := s.ListContas(ctx, emp)
+	if len(lista) != 1 || lista[0].BankID != "001" {
+		t.Fatalf("ListContas não trouxe os identificadores: %+v", lista)
+	}
+}
+
+func TestDeleteContaBloqueadaComLancamentos(t *testing.T) {
+	ctx := context.Background()
+	s := novoStore(t)
+	emp := novaEmpresa(t, s, "Empresa A")
+
+	conta, err := s.CreateConta(ctx, emp, model.Conta{Nome: "Caixa"})
+	if err != nil {
+		t.Fatalf("CreateConta: %v", err)
+	}
+	l, err := s.CreateLancamento(ctx, emp, model.Lancamento{
+		Tipo: "pagar", Descricao: "Fornecedor", ContaID: &conta.ID,
+		Valor: 100, DataVencimento: "2026-09-10",
+	})
+	if err != nil {
+		t.Fatalf("CreateLancamento: %v", err)
+	}
+
+	if err := s.DeleteConta(ctx, conta.ID); !errors.Is(err, storage.ErrContaEmUso) {
+		t.Fatalf("DeleteConta com lançamento vinculado: esperava ErrContaEmUso, veio %v", err)
+	}
+
+	// removido o lançamento, a conta pode ser excluída
+	if err := s.DeleteLancamento(ctx, l.ID); err != nil {
+		t.Fatalf("DeleteLancamento: %v", err)
+	}
+	if err := s.DeleteConta(ctx, conta.ID); err != nil {
+		t.Fatalf("DeleteConta após remover o lançamento: %v", err)
+	}
+}
+
 // garante, em tempo de compilação, que *Store satisfaz a interface.
 var _ storage.Store = (*Store)(nil)

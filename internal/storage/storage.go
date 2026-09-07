@@ -32,6 +32,11 @@ import (
 // ErrNaoEncontrado é devolvido quando um id informado não existe.
 var ErrNaoEncontrado = errors.New("registro não encontrado")
 
+// ErrContaEmUso é devolvido por DeleteConta quando a conta ainda tem
+// lançamentos vinculados (a exclusão é bloqueada em vez de anular a
+// referência, para não órfã histórico já conciliado).
+var ErrContaEmUso = errors.New("conta possui lançamentos vinculados e não pode ser excluída")
+
 // Store é o contrato de persistência. Toda implementação precisa ser
 // segura para uso concorrente (o Wails chama métodos em goroutines).
 type Store interface {
@@ -62,6 +67,8 @@ type Store interface {
 	GetConta(ctx context.Context, id int) (model.Conta, error)
 	CreateConta(ctx context.Context, empresaID int, c model.Conta) (model.Conta, error)
 	UpdateConta(ctx context.Context, c model.Conta) (model.Conta, error)
+	// DeleteConta remove a conta. Devolve ErrContaEmUso se ainda houver
+	// lançamentos vinculados a ela.
 	DeleteConta(ctx context.Context, id int) error
 
 	// ----- Categorias (escopo: empresa) -----

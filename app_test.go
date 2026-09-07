@@ -27,6 +27,17 @@ func appDeTeste(t *testing.T) *App {
 	return NewApp(st)
 }
 
+// contaDeTeste cria uma conta na empresa ativa e devolve seu id, para os
+// testes que precisam lançar (ContaID é obrigatório).
+func contaDeTeste(t *testing.T, a *App) int {
+	t.Helper()
+	c, err := a.CreateConta("Caixa", 0, "", "", "")
+	if err != nil {
+		t.Fatalf("CreateConta: %v", err)
+	}
+	return c.ID
+}
+
 func limparEmpresaAtiva(t *testing.T, st *sqlite.Store) {
 	t.Helper()
 	ctx := context.Background()
@@ -49,7 +60,8 @@ func TestDashboardEDRE(t *testing.T) {
 	a := appDeTeste(t)
 	_ = context.Background()
 
-	if _, err := a.CreateConta("Caixa", 1000); err != nil {
+	caixa, err := a.CreateConta("Caixa", 1000, "", "", "")
+	if err != nil {
 		t.Fatal(err)
 	}
 	receita, _ := a.CreateCategoria("Vendas", "receita")
@@ -57,7 +69,7 @@ func TestDashboardEDRE(t *testing.T) {
 
 	// uma entrada já recebida e uma saída em aberto, no mesmo mês
 	entrada, err := a.CreateLancamento(model.LancamentoInput{
-		Tipo: "receber", Descricao: "Venda", CategoriaID: &receita.ID,
+		Tipo: "receber", Descricao: "Venda", CategoriaID: &receita.ID, ContaID: &caixa.ID,
 		Valor: 500, DataVencimento: "2026-05-10",
 	})
 	if err != nil {
@@ -67,7 +79,7 @@ func TestDashboardEDRE(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := a.CreateLancamento(model.LancamentoInput{
-		Tipo: "pagar", Descricao: "Aluguel maio", CategoriaID: &despesa.ID,
+		Tipo: "pagar", Descricao: "Aluguel maio", CategoriaID: &despesa.ID, ContaID: &caixa.ID,
 		Valor: 200, DataVencimento: "2026-05-20",
 	}); err != nil {
 		t.Fatal(err)
@@ -115,16 +127,17 @@ func TestDashboardEDRE(t *testing.T) {
 
 func TestFiltroPorStatusDerivado(t *testing.T) {
 	a := appDeTeste(t)
+	conta := contaDeTeste(t, a)
 
 	// vencido e não pago => status "atrasado"
 	if _, err := a.CreateLancamento(model.LancamentoInput{
-		Tipo: "pagar", Descricao: "Conta velha", Valor: 50, DataVencimento: "2000-01-01",
+		Tipo: "pagar", Descricao: "Conta velha", ContaID: &conta, Valor: 50, DataVencimento: "2000-01-01",
 	}); err != nil {
 		t.Fatal(err)
 	}
 	// futuro => "pendente"
 	if _, err := a.CreateLancamento(model.LancamentoInput{
-		Tipo: "pagar", Descricao: "Conta futura", Valor: 70, DataVencimento: "2099-01-01",
+		Tipo: "pagar", Descricao: "Conta futura", ContaID: &conta, Valor: 70, DataVencimento: "2099-01-01",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -140,12 +153,20 @@ func TestFiltroPorStatusDerivado(t *testing.T) {
 
 func TestConciliar(t *testing.T) {
 	a := appDeTeste(t)
+	conta := contaDeTeste(t, a)
 
 	l, err := a.CreateLancamento(model.LancamentoInput{
-		Tipo: "pagar", Descricao: "Fornecedor X", Valor: 120, DataVencimento: "2026-06-01",
+		Tipo: "pagar", Descricao: "Fornecedor X", ContaID: &conta, Valor: 120, DataVencimento: "2026-06-01",
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	// ContaID é obrigatório
+	if _, err := a.CreateLancamento(model.LancamentoInput{
+		Tipo: "pagar", Descricao: "Sem conta", Valor: 10, DataVencimento: "2026-06-01",
+	}); err == nil {
+		t.Fatal("CreateLancamento devia recusar lançamento sem conta")
 	}
 
 	// não dá pra conciliar antes da baixa
@@ -208,7 +229,7 @@ func TestMultiplasEmpresas(t *testing.T) {
 	a := appDeTeste(t)
 
 	// dado na Empresa Principal
-	if _, err := a.CreateConta("Caixa Principal", 100); err != nil {
+	if _, err := a.CreateConta("Caixa Principal", 100, "", "", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -232,7 +253,8 @@ func TestMultiplasEmpresas(t *testing.T) {
 
 	// dado da Empresa Principal não vaza para a Filial
 	if _, err := a.CreateLancamento(model.LancamentoInput{
-		Tipo: "pagar", Descricao: "Só da filial", Valor: 10, DataVencimento: "2026-06-01",
+		Tipo: "pagar", Descricao: "Só da filial", ContaID: &contas[0].ID,
+		Valor: 10, DataVencimento: "2026-06-01",
 	}); err != nil {
 		t.Fatal(err)
 	}

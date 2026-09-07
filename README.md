@@ -142,8 +142,11 @@ Regras do contrato (ver comentário em `internal/storage/storage.go`):
 `Create*` recebe a entidade sem id e devolve com o id atribuído; id
 inexistente → `ErrNaoEncontrado`; `Status` do lançamento nunca é
 persistido (mas `DataPagamento` e `DataConciliacao` são fatos e ficam
-gravados); remover conta/categoria **anula** a referência nos lançamentos
-(não os apaga).
+gravados). Todo lançamento **pertence a uma conta/caixa** (`ContaID`
+obrigatório; validado em `app.go`); por isso `DeleteConta` **bloqueia**
+(`ErrContaEmUso`) enquanto houver lançamentos vinculados, em vez de anular
+a referência. Remover uma categoria continua **anulando** a referência
+(`CategoriaID` é opcional).
 
 ### Múltiplas empresas / filiais
 
@@ -263,7 +266,8 @@ ele serve para a instalação inicial — o updater continua consumindo o `.zip`
   **Excel (.xlsx)** e **CSV**, via diálogo nativo "Salvar como".
 - **Atualização automática** — verifica as Releases do GitHub a cada abertura
   e instala a versão nova com um clique.
-- **Cadastros** — contas bancárias/caixas e categorias (plano de contas).
+- **Cadastros** — contas bancárias/caixas (com código do banco, número e
+  tipo da conta para conciliação por extrato) e categorias (plano de contas).
 
 ## Testes
 
@@ -272,18 +276,23 @@ go test ./...
 ```
 
 Cobrem a implementação SQLite da interface `Store` (CRUD, filtros, baixa/
-estorno, anulação de referência, erros de id inexistente, **isolamento por
-empresa, cascade de exclusão, migração de banco antigo e adoção de dados
-soltos**), a regra de negócio em `app.go` (saldo do dashboard, DRE, fluxo de
-caixa acumulado, filtro por status derivado e **fluxo de múltiplas
-empresas**) e a geração de relatórios em `internal/report` (moeda pt-BR e
+estorno, conciliação, anulação de referência de categoria, bloqueio de
+exclusão de conta em uso, identificadores bancários da conta, erros de id
+inexistente, **isolamento por empresa, cascade de exclusão, migração de
+banco antigo e adoção de dados soltos**), a regra de negócio em `app.go`
+(saldo do dashboard, DRE, fluxo de caixa acumulado, filtro por status
+derivado, `ContaID` obrigatório, conciliar/desconciliar e **fluxo de
+múltiplas empresas**) e a geração de relatórios em `internal/report` (moeda pt-BR e
 saída válida de PDF, XLSX e CSV). Cada implementação futura de `Store` pode
 reaproveitar o mesmo estilo de teste do pacote `internal/storage/sqlite`.
 
 ## O que ainda falta para virar um produto completo
 
 - **Múltiplos usuários/permissões** (as empresas já são isoladas)
-- **Conciliação bancária** (importação de extrato OFX/CSV)
+- **Conciliação bancária** (importação de extrato OFX/CSV) — base já
+  pronta: `ContaID` obrigatório no lançamento e identificadores
+  `bankId`/`acctId`/`acctType` na conta; falta o parser de extrato e o
+  casamento das linhas
 - **Controle de inadimplência** com régua de cobrança
 - **Backup automático em nuvem** (hoje os dados ficam só na máquina local)
 - **Autenticação e licenciamento**, se for vender como assinatura

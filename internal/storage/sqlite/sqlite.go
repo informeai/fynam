@@ -66,7 +66,10 @@ CREATE TABLE IF NOT EXISTS contas (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     empresa_id    INTEGER REFERENCES empresas(id) ON DELETE CASCADE,
     nome          TEXT    NOT NULL,
-    saldo_inicial REAL    NOT NULL DEFAULT 0
+    saldo_inicial REAL    NOT NULL DEFAULT 0,
+    bank_id       TEXT    NOT NULL DEFAULT '',
+    acct_id       TEXT    NOT NULL DEFAULT '',
+    acct_type     TEXT    NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS categorias (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -116,6 +119,14 @@ func (s *Store) migrate(ctx context.Context) error {
 	if err := s.garantirColuna(ctx, "lancamentos", "data_conciliacao",
 		"ALTER TABLE lancamentos ADD COLUMN data_conciliacao TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
+	}
+	// Bancos criados antes da conciliação por extrato não têm os
+	// identificadores bancários na conta.
+	for _, col := range []string{"bank_id", "acct_id", "acct_type"} {
+		if err := s.garantirColuna(ctx, "contas", col,
+			"ALTER TABLE contas ADD COLUMN "+col+" TEXT NOT NULL DEFAULT ''"); err != nil {
+			return err
+		}
 	}
 	if _, err := s.db.ExecContext(ctx, schemaIndicesEmpresa); err != nil {
 		return err
@@ -278,9 +289,17 @@ func (s *Store) SetConfig(ctx context.Context, chave, valor string) error {
 // Contas
 // ---------------------------------------------------------------------
 
+const contaCols = `id, nome, saldo_inicial, bank_id, acct_id, acct_type`
+
+func scanConta(sc interface{ Scan(...any) error }) (model.Conta, error) {
+	var c model.Conta
+	err := sc.Scan(&c.ID, &c.Nome, &c.SaldoInicial, &c.BankID, &c.AcctID, &c.AcctType)
+	return c, err
+}
+
 func (s *Store) ListContas(ctx context.Context, empresaID int) ([]model.Conta, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, nome, saldo_inicial FROM contas WHERE empresa_id = ? ORDER BY id`, empresaID)
+		`SELECT `+contaCols+` FROM contas WHERE empresa_id = ? ORDER BY id`, empresaID)
 	if err != nil {
 		return nil, err
 	}
@@ -288,8 +307,8 @@ func (s *Store) ListContas(ctx context.Context, empresaID int) ([]model.Conta, e
 
 	out := []model.Conta{}
 	for rows.Next() {
-		var c model.Conta
-		if err := rows.Scan(&c.ID, &c.Nome, &c.SaldoInicial); err != nil {
+		c, err := scanConta(rows)
+		if err != nil {
 			return nil, err
 		}
 		out = append(out, c)
@@ -298,10 +317,8 @@ func (s *Store) ListContas(ctx context.Context, empresaID int) ([]model.Conta, e
 }
 
 func (s *Store) GetConta(ctx context.Context, id int) (model.Conta, error) {
-	var c model.Conta
-	err := s.db.QueryRowContext(ctx,
-		`SELECT id, nome, saldo_inicial FROM contas WHERE id = ?`, id).
-		Scan(&c.ID, &c.Nome, &c.SaldoInicial)
+	c, err := scanConta(s.db.QueryRowContext(ctx,
+		`SELECT `+contaCols+` FROM contas WHERE id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.Conta{}, storage.ErrNaoEncontrado
 	}
@@ -310,8 +327,9 @@ func (s *Store) GetConta(ctx context.Context, id int) (model.Conta, error) {
 
 func (s *Store) CreateConta(ctx context.Context, empresaID int, c model.Conta) (model.Conta, error) {
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO contas (empresa_id, nome, saldo_inicial) VALUES (?, ?, ?)`,
-		empresaID, c.Nome, c.SaldoInicial)
+		`INSERT INTO contas (empresa_id, nome, saldo_inicial, bank_id, acct_id, acct_type)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		empresaID, c.Nome, c.SaldoInicial, c.BankID, c.AcctID, c.AcctType)
 	if err != nil {
 		return model.Conta{}, err
 	}
@@ -325,7 +343,9 @@ func (s *Store) CreateConta(ctx context.Context, empresaID int, c model.Conta) (
 
 func (s *Store) UpdateConta(ctx context.Context, c model.Conta) (model.Conta, error) {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE contas SET nome = ?, saldo_inicial = ? WHERE id = ?`, c.Nome, c.SaldoInicial, c.ID)
+		`UPDATE contas SET nome = ?, saldo_inicial = ?, bank_id = ?, acct_id = ?, acct_type = ?
+		 WHERE id = ?`,
+		c.Nome, c.SaldoInicial, c.BankID, c.AcctID, c.AcctType, c.ID)
 	if err != nil {
 		return model.Conta{}, err
 	}
@@ -336,6 +356,14 @@ func (s *Store) UpdateConta(ctx context.Context, c model.Conta) (model.Conta, er
 }
 
 func (s *Store) DeleteConta(ctx context.Context, id int) error {
+	var vinculados int
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM lancamentos WHERE conta_id = ?`, id).Scan(&vinculados); err != nil {
+		return err
+	}
+	if vinculados > 0 {
+		return storage.ErrContaEmUso
+	}
 	_, err := s.db.ExecContext(ctx, `DELETE FROM contas WHERE id = ?`, id)
 	return err
 }

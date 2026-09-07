@@ -422,6 +422,10 @@
   }
 
   async function openModalLancamento(tipo, id = null) {
+    if (!id && state.contas.length === 0) {
+      toast('Cadastre uma conta / caixa antes de lançar.', true);
+      return;
+    }
     const selCategoria = document.getElementById('lanc-categoria');
     const selConta = document.getElementById('lanc-conta');
     selCategoria.innerHTML = state.categorias
@@ -652,8 +656,11 @@
       e.preventDefault();
       const nome = document.getElementById('conta-nome').value.trim();
       const saldoInicial = Number(document.getElementById('conta-saldo').value) || 0;
+      const bankId = document.getElementById('conta-bank-id').value.trim();
+      const acctId = document.getElementById('conta-acct-id').value.trim();
+      const acctType = document.getElementById('conta-acct-type').value;
       if (!nome) return;
-      await App.CreateConta(nome, saldoInicial);
+      await App.CreateConta(nome, saldoInicial, bankId, acctId, acctType);
       e.target.reset();
       await refreshCategoriasEContas();
       loadCadastros();
@@ -674,15 +681,22 @@
   async function loadCadastros() {
     await refreshCategoriasEContas();
 
+    const acctTypeLabel = { CHECKING: 'Corrente', SAVINGS: 'Poupança', CASH: 'Caixa' };
     const listaContas = document.getElementById('lista-contas');
-    listaContas.innerHTML = state.contas.map((c) => `
+    listaContas.innerHTML = state.contas.map((c) => {
+      const banco = [c.bankId, c.acctId].filter(Boolean).join(' / ');
+      const dados = [`Saldo inicial: ${fmtMoney(c.saldoInicial)}`];
+      if (banco) dados.push(`Banco ${escapeHtml(banco)}`);
+      if (c.acctType) dados.push(acctTypeLabel[c.acctType] || escapeHtml(c.acctType));
+      return `
       <div class="mini-row">
         <div class="mini-main">
           <span>${escapeHtml(c.nome)}</span>
-          <span class="mini-sub">Saldo inicial: ${fmtMoney(c.saldoInicial)}</span>
+          <span class="mini-sub">${dados.join(' · ')}</span>
         </div>
         <button class="mini-remove" data-remove-conta="${c.id}">✕</button>
-      </div>`).join('') || '<div class="empty-msg">Nenhuma conta cadastrada.</div>';
+      </div>`;
+    }).join('') || '<div class="empty-msg">Nenhuma conta cadastrada.</div>';
 
     const listaCategorias = document.getElementById('lista-categorias');
     listaCategorias.innerHTML = state.categorias.map((c) => `
@@ -696,7 +710,12 @@
 
     listaContas.querySelectorAll('[data-remove-conta]').forEach((btn) => {
       btn.addEventListener('click', async () => {
-        await App.DeleteConta(Number(btn.dataset.removeConta));
+        try {
+          await App.DeleteConta(Number(btn.dataset.removeConta));
+        } catch (err) {
+          toast(String(err && err.message ? err.message : err), true);
+          return;
+        }
         await refreshCategoriasEContas();
         loadCadastros();
       });

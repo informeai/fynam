@@ -154,6 +154,9 @@ export namespace model {
 	    id: number;
 	    nome: string;
 	    saldoInicial: number;
+	    bankId: string;
+	    acctId: string;
+	    acctType: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Conta(source);
@@ -164,6 +167,9 @@ export namespace model {
 	        this.id = source["id"];
 	        this.nome = source["nome"];
 	        this.saldoInicial = source["saldoInicial"];
+	        this.bankId = source["bankId"];
+	        this.acctId = source["acctId"];
+	        this.acctType = source["acctType"];
 	    }
 	}
 	export class Empresa {

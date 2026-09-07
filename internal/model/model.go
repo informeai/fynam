@@ -18,10 +18,19 @@ type Empresa struct {
 }
 
 // Conta bancária / caixa.
+//
+// BankID, AcctID e AcctType são os identificadores usados na conciliação
+// por importação de extrato (OFX/CSV): permitem casar o cabeçalho
+// <BANKACCTFROM> do arquivo com a conta certa e recusar um arquivo do
+// banco errado. São opcionais — uma conta-caixa interna pode deixá-los
+// em branco. AcctType segue os valores do OFX ("CHECKING", "SAVINGS"...).
 type Conta struct {
 	ID           int     `json:"id"`
 	Nome         string  `json:"nome"`
 	SaldoInicial float64 `json:"saldoInicial"`
+	BankID       string  `json:"bankId"`
+	AcctID       string  `json:"acctId"`
+	AcctType     string  `json:"acctType"`
 }
 
 // Categoria do plano de contas simplificado. Tipo: "receita" | "despesa".
@@ -53,6 +62,8 @@ type Lancamento struct {
 }
 
 // LancamentoInput é o payload de criação/edição vindo do frontend.
+// ContaID é obrigatório (todo lançamento pertence a uma conta/caixa);
+// CategoriaID continua opcional.
 type LancamentoInput struct {
 	Tipo           string  `json:"tipo"`
 	Descricao      string  `json:"descricao"`

@@ -12,7 +12,7 @@ export function Conciliar(arg1:number,arg2:string):Promise<model.Lancamento>;
 
 export function CreateCategoria(arg1:string,arg2:string):Promise<model.Categoria>;
 
-export function CreateConta(arg1:string,arg2:number):Promise<model.Conta>;
+export function CreateConta(arg1:string,arg2:number,arg3:string,arg4:string,arg5:string):Promise<model.Conta>;
 
 export function CreateLancamento(arg1:model.LancamentoInput):Promise<model.Lancamento>;
 
@@ -58,7 +58,7 @@ export function RelatorioFluxoCaixa(arg1:number):Promise<Array<main.FluxoCaixaLi
 
 export function TrocarEmpresa(arg1:number):Promise<void>;
 
-export function UpdateConta(arg1:number,arg2:string,arg3:number):Promise<model.Conta>;
+export function UpdateConta(arg1:number,arg2:string,arg3:number,arg4:string,arg5:string,arg6:string):Promise<model.Conta>;
 
 export function UpdateLancamento(arg1:number,arg2:model.LancamentoInput):Promise<model.Lancamento>;
 
