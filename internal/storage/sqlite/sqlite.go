@@ -102,6 +102,7 @@ CREATE TABLE IF NOT EXISTS extrato_linhas (
     tipo          TEXT    NOT NULL DEFAULT '',
     descricao     TEXT    NOT NULL DEFAULT '',
     lancamento_id INTEGER REFERENCES lancamentos(id)         ON DELETE SET NULL,
+    status        TEXT    NOT NULL DEFAULT '',
     importado_em  TEXT    NOT NULL DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_extrato_conta_fitid ON extrato_linhas(conta_id, fitid);
@@ -140,6 +141,11 @@ func (s *Store) migrate(ctx context.Context) error {
 			"ALTER TABLE contas ADD COLUMN "+col+" TEXT NOT NULL DEFAULT ''"); err != nil {
 			return err
 		}
+	}
+	// extrato_linhas da v1 inicial não tinha a coluna status.
+	if err := s.garantirColuna(ctx, "extrato_linhas", "status",
+		"ALTER TABLE extrato_linhas ADD COLUMN status TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
 	}
 	if _, err := s.db.ExecContext(ctx, schemaIndicesEmpresa); err != nil {
 		return err
@@ -566,37 +572,41 @@ func (s *Store) SetConciliacao(ctx context.Context, id int, dataConciliacao stri
 // Extrato OFX
 // ---------------------------------------------------------------------
 
-func (s *Store) ExtratoFitidsImportados(ctx context.Context, contaID int) (map[string]bool, error) {
+func (s *Store) ExtratoRegistrosPorFitid(ctx context.Context, contaID int) (map[string]model.ExtratoRegistro, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT fitid FROM extrato_linhas WHERE conta_id = ?`, contaID)
+		`SELECT fitid, status, lancamento_id FROM extrato_linhas WHERE conta_id = ?`, contaID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	out := map[string]bool{}
+	out := map[string]model.ExtratoRegistro{}
 	for rows.Next() {
-		var fitid string
-		if err := rows.Scan(&fitid); err != nil {
+		var (
+			fitid, status string
+			lancID        sql.NullInt64
+		)
+		if err := rows.Scan(&fitid, &status, &lancID); err != nil {
 			return nil, err
 		}
-		out[fitid] = true
+		out[fitid] = model.ExtratoRegistro{Status: status, LancamentoID: fromNullInt(lancID)}
 	}
 	return out, rows.Err()
 }
 
-func (s *Store) RegistrarExtratoLinha(ctx context.Context, contaID int, l model.ExtratoLinha, lancamentoID *int) error {
+func (s *Store) RegistrarExtratoLinha(ctx context.Context, contaID int, l model.ExtratoLinha, status string, lancamentoID *int) error {
 	if l.FITID == "" {
 		return nil // sem FITID não há como deduplicar; nada a registrar
 	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO extrato_linhas
-		   (conta_id, fitid, data, valor, tipo, descricao, lancamento_id, importado_em)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		   (conta_id, fitid, data, valor, tipo, descricao, lancamento_id, status, importado_em)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(conta_id, fitid) DO UPDATE SET
 		   lancamento_id = excluded.lancamento_id,
+		   status        = excluded.status,
 		   importado_em  = excluded.importado_em`,
 		contaID, l.FITID, l.Data, l.Valor, l.Tipo, l.Descricao,
-		toNullInt(lancamentoID), time.Now().UTC().Format(time.RFC3339))
+		toNullInt(lancamentoID), status, time.Now().UTC().Format(time.RFC3339))
 	return err
 }

@@ -104,12 +104,12 @@ func (a *App) ImportarExtratoOFX(contaID int) (PreviaImportacaoOFX, error) {
 	if err != nil {
 		return PreviaImportacaoOFX{}, err
 	}
-	fitids, err := a.store.ExtratoFitidsImportados(a.c(), contaID)
+	registros, err := a.store.ExtratoRegistrosPorFitid(a.c(), contaID)
 	if err != nil {
 		return PreviaImportacaoOFX{}, err
 	}
 
-	previa := montarPreviaOFX(ext, conta, daConta, fitids)
+	previa := montarPreviaOFX(ext, conta, daConta, registros)
 	previa.Arquivo = filepath.Base(caminho)
 	previa.ContaID = contaID
 	return previa, nil
@@ -141,7 +141,7 @@ func (a *App) AplicarImportacaoOFX(contaID int, decisoes []DecisaoConciliacao) (
 			r.Criados++
 
 		default: // "ignorar"
-			_ = a.store.RegistrarExtratoLinha(a.c(), contaID, d.Linha, nil)
+			_ = a.store.RegistrarExtratoLinha(a.c(), contaID, d.Linha, "ignorado", nil)
 			r.Ignorados++
 		}
 	}
@@ -167,7 +167,7 @@ func (a *App) conciliarComExistente(contaID int, d DecisaoConciliacao) error {
 	if _, err := a.store.SetConciliacao(a.c(), l.ID, d.Linha.Data); err != nil {
 		return err
 	}
-	return a.store.RegistrarExtratoLinha(a.c(), contaID, d.Linha, &l.ID)
+	return a.store.RegistrarExtratoLinha(a.c(), contaID, d.Linha, "conciliado", &l.ID)
 }
 
 func (a *App) criarDeLinhaOFX(contaID int, d DecisaoConciliacao) error {
@@ -190,7 +190,7 @@ func (a *App) criarDeLinhaOFX(contaID int, d DecisaoConciliacao) error {
 	if _, err := a.store.SetConciliacao(a.c(), novo.ID, d.Linha.Data); err != nil {
 		return err
 	}
-	return a.store.RegistrarExtratoLinha(a.c(), contaID, d.Linha, &novo.ID)
+	return a.store.RegistrarExtratoLinha(a.c(), contaID, d.Linha, "criado", &novo.ID)
 }
 
 // lancamentosDaConta devolve, já com Status derivado, os lançamentos da
@@ -211,7 +211,12 @@ func (a *App) lancamentosDaConta(contaID int) ([]model.Lancamento, error) {
 
 // montarPreviaOFX é a parte pura (sem I/O) da importação: casa as
 // transações do extrato com os lançamentos da conta e decide a sugestão.
-func montarPreviaOFX(ext ofx.Extrato, conta model.Conta, daConta []model.Lancamento, fitids map[string]bool) PreviaImportacaoOFX {
+//
+// Um FITID já importado só é tratado como "já importada" enquanto o efeito
+// ainda existe: linha ignorada, ou linha cujo lançamento vinculado continua
+// conciliado. Se o operador desconciliou (ou excluiu) esse lançamento, a
+// linha volta a ser oferecida para reconciliação.
+func montarPreviaOFX(ext ofx.Extrato, conta model.Conta, daConta []model.Lancamento, registros map[string]model.ExtratoRegistro) PreviaImportacaoOFX {
 	previa := PreviaImportacaoOFX{
 		SemConflito: !contasConflitam(conta, ext.Conta),
 		Periodo:     periodoBR(ext.DataInicio, ext.DataFim),
@@ -223,6 +228,11 @@ func montarPreviaOFX(ext ofx.Extrato, conta model.Conta, daConta []model.Lancame
 			naoVazio(conta.BankID), naoVazio(conta.AcctID))
 	}
 
+	porID := make(map[int]model.Lancamento, len(daConta))
+	for _, l := range daConta {
+		porID[l.ID] = l
+	}
+
 	usados := map[int]bool{}
 	for _, t := range ext.Transacoes {
 		linha := model.ExtratoLinha{
@@ -232,29 +242,43 @@ func montarPreviaOFX(ext ofx.Extrato, conta model.Conta, daConta []model.Lancame
 			Tipo:      t.Tipo,
 			Descricao: t.Descricao,
 		}
-		lc := LinhaConciliacao{
-			Linha:       linha,
-			JaImportada: t.FITID != "" && fitids[t.FITID],
-		}
-		switch {
-		case lc.JaImportada:
+		lc := LinhaConciliacao{Linha: linha}
+
+		if reg, vista := registros[t.FITID]; t.FITID != "" && vista && efeitoAindaVale(reg, porID) {
+			lc.JaImportada = true
 			lc.Sugestao = "ignorar"
+			previa.Linhas = append(previa.Linhas, lc)
+			continue
+		}
+
+		lc.Candidatos = candidatosOFX(linha, daConta, usados)
+		switch len(lc.Candidatos) {
+		case 1:
+			id := lc.Candidatos[0].ID
+			lc.Sugestao, lc.SugestaoID = "conciliar", &id
+			usados[id] = true
+		case 0:
+			lc.Sugestao = "criar"
 		default:
-			lc.Candidatos = candidatosOFX(linha, daConta, usados)
-			switch len(lc.Candidatos) {
-			case 1:
-				id := lc.Candidatos[0].ID
-				lc.Sugestao, lc.SugestaoID = "conciliar", &id
-				usados[id] = true
-			case 0:
-				lc.Sugestao = "criar"
-			default:
-				lc.Sugestao = "ignorar" // ambíguo: operador decide
-			}
+			lc.Sugestao = "ignorar" // ambíguo: operador decide
 		}
 		previa.Linhas = append(previa.Linhas, lc)
 	}
 	return previa
+}
+
+// efeitoAindaVale diz se uma linha já importada ainda "conta": ignorada
+// permanece ignorada; conciliada/criada só enquanto o lançamento vinculado
+// existir e continuar conciliado.
+func efeitoAindaVale(reg model.ExtratoRegistro, porID map[int]model.Lancamento) bool {
+	if reg.Status == "ignorado" {
+		return true
+	}
+	if reg.LancamentoID == nil {
+		return false // lançamento vinculado foi excluído
+	}
+	l, ok := porID[*reg.LancamentoID]
+	return ok && l.DataConciliacao != ""
 }
 
 // candidatosOFX devolve os lançamentos da conta que casam com a linha do

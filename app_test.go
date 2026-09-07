@@ -294,7 +294,7 @@ func TestImportacaoOFX(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	previa := montarPreviaOFX(ext, model.Conta{}, daConta, map[string]bool{})
+	previa := montarPreviaOFX(ext, model.Conta{}, daConta, map[string]model.ExtratoRegistro{})
 
 	if !previa.SemConflito || previa.Periodo == "" {
 		t.Fatalf("prévia: semConflito=%v periodo=%q", previa.SemConflito, previa.Periodo)
@@ -336,15 +336,46 @@ func TestImportacaoOFX(t *testing.T) {
 	}
 
 	// reimportar o mesmo extrato: ambas as linhas agora são "já importadas"
-	fitids, err := a.store.ExtratoFitidsImportados(a.c(), conta)
+	daConta2, _ := a.lancamentosDaConta(conta)
+	regs, err := a.store.ExtratoRegistrosPorFitid(a.c(), conta)
 	if err != nil {
 		t.Fatal(err)
 	}
-	previa2 := montarPreviaOFX(ext, model.Conta{}, nil, fitids)
+	previa2 := montarPreviaOFX(ext, model.Conta{}, daConta2, regs)
 	for i, l := range previa2.Linhas {
 		if !l.JaImportada || l.Sugestao != "ignorar" {
 			t.Fatalf("reimport linha %d devia ser já importada/ignorar: %+v", i, l)
 		}
+	}
+
+	// desconciliar o aluguel manualmente: a linha do extrato volta a ser
+	// oferecida para reconciliação e a reimportação aplica de novo
+	if _, err := a.DesfazerConciliacao(aluguel.ID); err != nil {
+		t.Fatal(err)
+	}
+	daConta3, _ := a.lancamentosDaConta(conta)
+	regs, _ = a.store.ExtratoRegistrosPorFitid(a.c(), conta)
+	previa3 := montarPreviaOFX(ext, model.Conta{}, daConta3, regs)
+
+	linhaAluguel := previa3.Linhas[0]
+	if linhaAluguel.JaImportada || linhaAluguel.Sugestao != "conciliar" ||
+		linhaAluguel.SugestaoID == nil || *linhaAluguel.SugestaoID != aluguel.ID {
+		t.Fatalf("após desconciliar, a linha devia reabrir p/ conciliar com %d: %+v", aluguel.ID, linhaAluguel)
+	}
+	// a linha criada (B2) continua "já importada"
+	if !previa3.Linhas[1].JaImportada {
+		t.Fatalf("linha criada não deveria reabrir: %+v", previa3.Linhas[1])
+	}
+
+	r2, err := a.AplicarImportacaoOFX(conta, []DecisaoConciliacao{
+		{Linha: linhaAluguel.Linha, Acao: "conciliar", LancamentoID: linhaAluguel.SugestaoID},
+	})
+	if err != nil || r2.Conciliados != 1 {
+		t.Fatalf("reaplicar conciliação: r=%+v err=%v", r2, err)
+	}
+	pagos2, _ := a.ListLancamentos(model.LancamentoFiltro{Tipo: "pagar", Status: "conciliado"})
+	if len(pagos2) != 1 || pagos2[0].ID != aluguel.ID {
+		t.Fatalf("aluguel devia estar conciliado de novo: %+v", pagos2)
 	}
 }
 

@@ -94,12 +94,13 @@ type Store interface {
 
 	// ----- Extrato OFX (linhas já importadas; escopo: conta) -----
 
-	// ExtratoFitidsImportados devolve o conjunto de FITIDs já importados
-	// para a conta, para deduplicar novas importações.
-	ExtratoFitidsImportados(ctx context.Context, contaID int) (map[string]bool, error)
+	// ExtratoRegistrosPorFitid devolve, por FITID já importado na conta, o
+	// que foi feito com a linha e o lançamento vinculado — para deduplicar
+	// (e reabrir) novas importações.
+	ExtratoRegistrosPorFitid(ctx context.Context, contaID int) (map[string]model.ExtratoRegistro, error)
 
 	// RegistrarExtratoLinha grava a linha de extrato importada, de forma
-	// idempotente por (conta, FITID). lancamentoID nulo = linha vista e
-	// ignorada pelo operador.
-	RegistrarExtratoLinha(ctx context.Context, contaID int, l model.ExtratoLinha, lancamentoID *int) error
+	// idempotente por (conta, FITID). status é "conciliado", "criado" ou
+	// "ignorado"; lancamentoID é nulo quando ignorada.
+	RegistrarExtratoLinha(ctx context.Context, contaID int, l model.ExtratoLinha, status string, lancamentoID *int) error
 }

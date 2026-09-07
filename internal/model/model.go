@@ -108,6 +108,14 @@ type ExtratoLinha struct {
 	Descricao string  `json:"descricao"`
 }
 
+// ExtratoRegistro é o que se sabe sobre um FITID já importado numa conta:
+// o que foi feito com ele e a qual lançamento ficou vinculado (nulo se
+// ignorado, ou se o lançamento vinculado foi depois excluído).
+type ExtratoRegistro struct {
+	Status       string // "conciliado" | "criado" | "ignorado"
+	LancamentoID *int
+}
+
 // DerivarStatus calcula o status a partir das datas (e de DataConciliacao),
 // em vez de guardar um campo que poderia ficar desatualizado.
 //

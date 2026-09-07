@@ -364,33 +364,35 @@ func TestExtratoLinhas(t *testing.T) {
 		t.Fatalf("CreateLancamento: %v", err)
 	}
 
-	if fitids, _ := s.ExtratoFitidsImportados(ctx, conta.ID); len(fitids) != 0 {
-		t.Fatalf("conta nova não devia ter FITIDs: %v", fitids)
+	if regs, _ := s.ExtratoRegistrosPorFitid(ctx, conta.ID); len(regs) != 0 {
+		t.Fatalf("conta nova não devia ter registros: %v", regs)
 	}
 
 	linha := model.ExtratoLinha{FITID: "F1", Data: "2026-09-09", Valor: 100, Tipo: "pagar", Descricao: "x"}
-	if err := s.RegistrarExtratoLinha(ctx, conta.ID, linha, &l.ID); err != nil {
+	if err := s.RegistrarExtratoLinha(ctx, conta.ID, linha, "ignorado", nil); err != nil {
 		t.Fatalf("RegistrarExtratoLinha: %v", err)
 	}
-	// idempotente: re-registrar (ex.: mudou de ignorada p/ conciliada) não duplica
-	if err := s.RegistrarExtratoLinha(ctx, conta.ID, linha, &l.ID); err != nil {
+	// idempotente: re-registrar (ex.: mudou de ignorada p/ conciliada) não
+	// duplica e atualiza status + vínculo
+	if err := s.RegistrarExtratoLinha(ctx, conta.ID, linha, "conciliado", &l.ID); err != nil {
 		t.Fatalf("RegistrarExtratoLinha (upsert): %v", err)
 	}
 
-	fitids, err := s.ExtratoFitidsImportados(ctx, conta.ID)
+	regs, err := s.ExtratoRegistrosPorFitid(ctx, conta.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(fitids) != 1 || !fitids["F1"] {
-		t.Fatalf("FITIDs importados = %v", fitids)
+	if len(regs) != 1 || regs["F1"].Status != "conciliado" ||
+		regs["F1"].LancamentoID == nil || *regs["F1"].LancamentoID != l.ID {
+		t.Fatalf("registros = %+v", regs)
 	}
 
 	// linha sem FITID não é registrada (nada para deduplicar)
-	if err := s.RegistrarExtratoLinha(ctx, conta.ID, model.ExtratoLinha{Data: "2026-09-01"}, nil); err != nil {
+	if err := s.RegistrarExtratoLinha(ctx, conta.ID, model.ExtratoLinha{Data: "2026-09-01"}, "ignorado", nil); err != nil {
 		t.Fatalf("RegistrarExtratoLinha sem FITID: %v", err)
 	}
-	if fitids, _ := s.ExtratoFitidsImportados(ctx, conta.ID); len(fitids) != 1 {
-		t.Fatalf("linha sem FITID não devia ser gravada: %v", fitids)
+	if regs, _ := s.ExtratoRegistrosPorFitid(ctx, conta.ID); len(regs) != 1 {
+		t.Fatalf("linha sem FITID não devia ser gravada: %v", regs)
 	}
 }
 
