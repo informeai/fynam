@@ -536,6 +536,36 @@ html, body {
   margin-top: 4px;
 }
 
+.modal.modal-lg {
+  width: min(760px, 94vw);
+}
+
+.ofx-preview {
+  max-height: 46vh;
+  overflow: auto;
+  margin: 8px 0;
+}
+
+.ofx-preview .table th,
+.ofx-preview .table td {
+  font-size: 12.5px;
+}
+
+.ofx-preview select {
+  max-width: 320px;
+}
+
+.ofx-aviso {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: var(--amber-bg);
+  color: var(--amber);
+  font-size: 12.5px;
+}
+
+tr.ofx-feita { opacity: 0.5; }
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;

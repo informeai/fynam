@@ -91,4 +91,15 @@ type Store interface {
 	// SetConciliacao marca (data != "") ou desfaz (data == "") a conciliação
 	// de um lançamento, de forma atômica.
 	SetConciliacao(ctx context.Context, id int, dataConciliacao string) (model.Lancamento, error)
+
+	// ----- Extrato OFX (linhas já importadas; escopo: conta) -----
+
+	// ExtratoFitidsImportados devolve o conjunto de FITIDs já importados
+	// para a conta, para deduplicar novas importações.
+	ExtratoFitidsImportados(ctx context.Context, contaID int) (map[string]bool, error)
+
+	// RegistrarExtratoLinha grava a linha de extrato importada, de forma
+	// idempotente por (conta, FITID). lancamentoID nulo = linha vista e
+	// ignorada pelo operador.
+	RegistrarExtratoLinha(ctx context.Context, contaID int, l model.ExtratoLinha, lancamentoID *int) error
 }

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	_ "modernc.org/sqlite"
 
@@ -92,6 +93,18 @@ CREATE TABLE IF NOT EXISTS lancamentos (
 );
 CREATE INDEX IF NOT EXISTS idx_lancamentos_venc ON lancamentos(data_vencimento);
 CREATE INDEX IF NOT EXISTS idx_lancamentos_tipo ON lancamentos(tipo);
+CREATE TABLE IF NOT EXISTS extrato_linhas (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    conta_id      INTEGER NOT NULL REFERENCES contas(id)     ON DELETE CASCADE,
+    fitid         TEXT    NOT NULL,
+    data          TEXT    NOT NULL DEFAULT '',
+    valor         REAL    NOT NULL DEFAULT 0,
+    tipo          TEXT    NOT NULL DEFAULT '',
+    descricao     TEXT    NOT NULL DEFAULT '',
+    lancamento_id INTEGER REFERENCES lancamentos(id)         ON DELETE SET NULL,
+    importado_em  TEXT    NOT NULL DEFAULT ''
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_extrato_conta_fitid ON extrato_linhas(conta_id, fitid);
 `
 
 // schemaIndicesEmpresa só pode rodar depois que a coluna empresa_id existe
@@ -547,4 +560,43 @@ func (s *Store) SetConciliacao(ctx context.Context, id int, dataConciliacao stri
 		return model.Lancamento{}, storage.ErrNaoEncontrado
 	}
 	return s.GetLancamento(ctx, id)
+}
+
+// ---------------------------------------------------------------------
+// Extrato OFX
+// ---------------------------------------------------------------------
+
+func (s *Store) ExtratoFitidsImportados(ctx context.Context, contaID int) (map[string]bool, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT fitid FROM extrato_linhas WHERE conta_id = ?`, contaID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := map[string]bool{}
+	for rows.Next() {
+		var fitid string
+		if err := rows.Scan(&fitid); err != nil {
+			return nil, err
+		}
+		out[fitid] = true
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) RegistrarExtratoLinha(ctx context.Context, contaID int, l model.ExtratoLinha, lancamentoID *int) error {
+	if l.FITID == "" {
+		return nil // sem FITID não há como deduplicar; nada a registrar
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO extrato_linhas
+		   (conta_id, fitid, data, valor, tipo, descricao, lancamento_id, importado_em)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(conta_id, fitid) DO UPDATE SET
+		   lancamento_id = excluded.lancamento_id,
+		   importado_em  = excluded.importado_em`,
+		contaID, l.FITID, l.Data, l.Valor, l.Tipo, l.Descricao,
+		toNullInt(lancamentoID), time.Now().UTC().Format(time.RFC3339))
+	return err
 }

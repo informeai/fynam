@@ -494,6 +494,123 @@
   function openModal(name) { document.getElementById(`modal-${name}`).classList.add('open'); }
   function closeModal(name) { document.getElementById(`modal-${name}`).classList.remove('open'); }
 
+  // ---------------------------------------------------------------
+  // Importação e conciliação de extrato OFX
+  // ---------------------------------------------------------------
+
+  let ofxPrevia = null;
+
+  function setupImportacaoOFX() {
+    document.querySelectorAll('[data-open-ofx]').forEach((btn) => {
+      btn.addEventListener('click', openModalOFX);
+    });
+    document.querySelectorAll('[data-close-modal="ofx"]').forEach((btn) => {
+      btn.addEventListener('click', () => closeModal('ofx'));
+    });
+    document.getElementById('ofx-escolher').addEventListener('click', escolherArquivoOFX);
+    document.getElementById('ofx-aplicar').addEventListener('click', aplicarOFX);
+  }
+
+  function openModalOFX() {
+    if (state.contas.length === 0) {
+      toast('Cadastre uma conta / caixa antes de importar.', true);
+      return;
+    }
+    ofxPrevia = null;
+    document.getElementById('ofx-conta').innerHTML =
+      state.contas.map((c) => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join('');
+    document.getElementById('ofx-step-1').hidden = false;
+    document.getElementById('ofx-step-2').hidden = true;
+    document.getElementById('ofx-linhas').innerHTML = '';
+    openModal('ofx');
+  }
+
+  async function escolherArquivoOFX() {
+    const contaId = Number(document.getElementById('ofx-conta').value);
+    let previa;
+    try {
+      previa = await App.ImportarExtratoOFX(contaId);
+    } catch (err) {
+      toast(String(err && err.message ? err.message : err), true);
+      return;
+    }
+    if (!previa || !previa.arquivo) return; // usuário cancelou o diálogo
+    ofxPrevia = previa;
+    renderPreviaOFX(previa);
+  }
+
+  function renderPreviaOFX(p) {
+    document.getElementById('ofx-step-1').hidden = true;
+    document.getElementById('ofx-step-2').hidden = false;
+    document.getElementById('ofx-resumo').textContent =
+      `${p.arquivo} — ${p.linhas.length} transação(ões)` + (p.periodo ? ` · período ${p.periodo}` : '');
+
+    const aviso = document.getElementById('ofx-aviso');
+    aviso.hidden = !p.aviso;
+    aviso.textContent = p.aviso || '';
+
+    const tbody = document.getElementById('ofx-linhas');
+    tbody.innerHTML = p.linhas.map((lc, i) => {
+      const l = lc.linha;
+      const mov = l.tipo === 'pagar'
+        ? '<span class="badge atrasado">Débito</span>'
+        : '<span class="badge recebido">Crédito</span>';
+      let acao;
+      if (lc.jaImportada) {
+        acao = '<span class="mini-sub">Já importada</span>';
+      } else {
+        const opts = (lc.candidatos || []).map((c) => {
+          const sel = lc.sugestao === 'conciliar' && lc.sugestaoId === c.id ? ' selected' : '';
+          return `<option value="conciliar:${c.id}"${sel}>Conciliar: ${escapeHtml(c.descricao)} · ${fmtDate(c.dataVencimento)} · ${fmtMoney(c.valor)}</option>`;
+        });
+        opts.push(`<option value="criar"${lc.sugestao === 'criar' ? ' selected' : ''}>Criar lançamento</option>`);
+        opts.push(`<option value="ignorar"${lc.sugestao === 'ignorar' ? ' selected' : ''}>Ignorar</option>`);
+        acao = `<select data-i="${i}">${opts.join('')}</select>`;
+      }
+      return `<tr class="${lc.jaImportada ? 'ofx-feita' : ''}">
+        <td>${fmtDate(l.data)}</td>
+        <td>${escapeHtml(l.descricao || '—')}</td>
+        <td>${mov}</td>
+        <td>${fmtMoney(l.valor)}</td>
+        <td>${acao}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  async function aplicarOFX() {
+    if (!ofxPrevia) return;
+    const decisoes = [];
+    document.querySelectorAll('#ofx-linhas select[data-i]').forEach((sel) => {
+      const lc = ofxPrevia.linhas[Number(sel.dataset.i)];
+      const [acao, id] = sel.value.split(':');
+      decisoes.push({
+        linha: lc.linha,
+        acao,
+        lancamentoId: acao === 'conciliar' ? Number(id) : null,
+        categoriaId: null,
+      });
+    });
+
+    let r;
+    try {
+      r = await App.AplicarImportacaoOFX(ofxPrevia.contaId, decisoes);
+    } catch (err) {
+      toast(String(err && err.message ? err.message : err), true);
+      return;
+    }
+
+    const temErro = r.erros && r.erros.length > 0;
+    toast(`Extrato: ${r.conciliados} conciliado(s), ${r.criados} criado(s), ${r.ignorados} ignorado(s)`
+      + (temErro ? ` · ${r.erros.length} erro(s)` : ''), temErro);
+
+    closeModal('ofx');
+    ofxPrevia = null;
+    await refreshCategoriasEContas();
+    loadLancamentos('pagar');
+    loadLancamentos('receber');
+    loadDashboard();
+  }
+
   // Diálogos em DOM — o WKWebView do macOS não implementa window.prompt/confirm,
   // então esses helpers os substituem devolvendo uma Promise.
   function askDialog({ title, message = '', input = false, inputType = 'text', value = '', label = 'Valor', okText = 'Confirmar', danger = false }) {
@@ -956,6 +1073,7 @@
     setupExport();
     setupUpdate();
     setupEmpresas();
+    setupImportacaoOFX();
     mostrarVersao();
     await carregarEmpresas();
     await refreshCategoriasEContas();

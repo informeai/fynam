@@ -53,6 +53,42 @@ export namespace main {
 		}
 	}
 	
+	export class DecisaoConciliacao {
+	    linha: model.ExtratoLinha;
+	    acao: string;
+	    lancamentoId?: number;
+	    categoriaId?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new DecisaoConciliacao(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.linha = this.convertValues(source["linha"], model.ExtratoLinha);
+	        this.acao = source["acao"];
+	        this.lancamentoId = source["lancamentoId"];
+	        this.categoriaId = source["categoriaId"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class FluxoCaixaLinha {
 	    mes: string;
 	    entradas: number;
@@ -88,6 +124,84 @@ export namespace main {
 	        this.entradas = source["entradas"];
 	        this.saidas = source["saidas"];
 	    }
+	}
+	export class LinhaConciliacao {
+	    linha: model.ExtratoLinha;
+	    jaImportada: boolean;
+	    candidatos: model.Lancamento[];
+	    sugestao: string;
+	    sugestaoId?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new LinhaConciliacao(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.linha = this.convertValues(source["linha"], model.ExtratoLinha);
+	        this.jaImportada = source["jaImportada"];
+	        this.candidatos = this.convertValues(source["candidatos"], model.Lancamento);
+	        this.sugestao = source["sugestao"];
+	        this.sugestaoId = source["sugestaoId"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class PreviaImportacaoOFX {
+	    arquivo: string;
+	    contaId: number;
+	    semConflito: boolean;
+	    aviso: string;
+	    periodo: string;
+	    linhas: LinhaConciliacao[];
+	
+	    static createFrom(source: any = {}) {
+	        return new PreviaImportacaoOFX(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.arquivo = source["arquivo"];
+	        this.contaId = source["contaId"];
+	        this.semConflito = source["semConflito"];
+	        this.aviso = source["aviso"];
+	        this.periodo = source["periodo"];
+	        this.linhas = this.convertValues(source["linhas"], LinhaConciliacao);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class Resumo {
 	    saldoAtual: number;
@@ -128,6 +242,24 @@ export namespace main {
 		    }
 		    return a;
 		}
+	}
+	export class ResumoImportacaoOFX {
+	    conciliados: number;
+	    criados: number;
+	    ignorados: number;
+	    erros: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ResumoImportacaoOFX(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.conciliados = source["conciliados"];
+	        this.criados = source["criados"];
+	        this.ignorados = source["ignorados"];
+	        this.erros = source["erros"];
+	    }
 	}
 
 }
@@ -188,6 +320,26 @@ export namespace model {
 	        this.nome = source["nome"];
 	        this.cnpj = source["cnpj"];
 	        this.criadaEm = source["criadaEm"];
+	    }
+	}
+	export class ExtratoLinha {
+	    fitid: string;
+	    data: string;
+	    valor: number;
+	    tipo: string;
+	    descricao: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExtratoLinha(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.fitid = source["fitid"];
+	        this.data = source["data"];
+	        this.valor = source["valor"];
+	        this.tipo = source["tipo"];
+	        this.descricao = source["descricao"];
 	    }
 	}
 	export class Lancamento {

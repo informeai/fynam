@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"fynam/internal/model"
+	"fynam/internal/ofx"
 	"fynam/internal/storage/sqlite"
 )
 
@@ -264,6 +265,86 @@ func TestDataPagamentoPeloFormulario(t *testing.T) {
 	}
 	if limpo.DataPagamento != "" || limpo.DataConciliacao != "" || limpo.Status == "conciliado" {
 		t.Fatalf("limpar dataPagamento devia reabrir e desconciliar: %+v", limpo)
+	}
+}
+
+func TestImportacaoOFX(t *testing.T) {
+	a := appDeTeste(t)
+	conta := contaDeTeste(t, a)
+
+	// um lançamento a pagar que deve casar com um débito do extrato
+	aluguel, err := a.CreateLancamento(model.LancamentoInput{
+		Tipo: "pagar", Descricao: "Aluguel", ContaID: &conta,
+		Valor: 2400, DataVencimento: "2026-09-08",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ext := ofx.Extrato{
+		Conta:      ofx.Conta{BankID: "341", AcctID: "111"},
+		DataInicio: "2026-09-01", DataFim: "2026-09-30",
+		Transacoes: []ofx.Transacao{
+			{FITID: "A1", Data: "2026-09-09", Valor: 2400, Tipo: "pagar", Descricao: "ALUGUEL IMOB"},
+			{FITID: "B2", Data: "2026-09-12", Valor: 1500, Tipo: "receber", Descricao: "CLIENTE XPTO"},
+		},
+	}
+
+	daConta, err := a.lancamentosDaConta(conta)
+	if err != nil {
+		t.Fatal(err)
+	}
+	previa := montarPreviaOFX(ext, model.Conta{}, daConta, map[string]bool{})
+
+	if !previa.SemConflito || previa.Periodo == "" {
+		t.Fatalf("prévia: semConflito=%v periodo=%q", previa.SemConflito, previa.Periodo)
+	}
+	if len(previa.Linhas) != 2 {
+		t.Fatalf("prévia devia ter 2 linhas, tem %d", len(previa.Linhas))
+	}
+	l0 := previa.Linhas[0]
+	if l0.Sugestao != "conciliar" || l0.SugestaoID == nil || *l0.SugestaoID != aluguel.ID {
+		t.Fatalf("linha 0 devia sugerir conciliar com %d: %+v", aluguel.ID, l0)
+	}
+	if previa.Linhas[1].Sugestao != "criar" {
+		t.Fatalf("linha 1 (sem candidato) devia sugerir criar: %+v", previa.Linhas[1])
+	}
+
+	// aplica: concilia a primeira, cria a segunda
+	r, err := a.AplicarImportacaoOFX(conta, []DecisaoConciliacao{
+		{Linha: previa.Linhas[0].Linha, Acao: "conciliar", LancamentoID: l0.SugestaoID},
+		{Linha: previa.Linhas[1].Linha, Acao: "criar"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Conciliados != 1 || r.Criados != 1 || len(r.Erros) != 0 {
+		t.Fatalf("resumo = %+v", r)
+	}
+
+	// o aluguel ficou conciliado com a data do extrato
+	pagos, _ := a.ListLancamentos(model.LancamentoFiltro{Tipo: "pagar", Status: "conciliado"})
+	if len(pagos) != 1 || pagos[0].ID != aluguel.ID ||
+		pagos[0].DataPagamento != "2026-09-09" || pagos[0].DataConciliacao != "2026-09-09" {
+		t.Fatalf("aluguel após conciliar: %+v", pagos)
+	}
+
+	// a segunda linha virou um lançamento a receber já conciliado
+	recebidos, _ := a.ListLancamentos(model.LancamentoFiltro{Tipo: "receber", Status: "conciliado"})
+	if len(recebidos) != 1 || recebidos[0].Valor != 1500 || recebidos[0].Descricao != "CLIENTE XPTO" {
+		t.Fatalf("lançamento criado do extrato: %+v", recebidos)
+	}
+
+	// reimportar o mesmo extrato: ambas as linhas agora são "já importadas"
+	fitids, err := a.store.ExtratoFitidsImportados(a.c(), conta)
+	if err != nil {
+		t.Fatal(err)
+	}
+	previa2 := montarPreviaOFX(ext, model.Conta{}, nil, fitids)
+	for i, l := range previa2.Linhas {
+		if !l.JaImportada || l.Sugestao != "ignorar" {
+			t.Fatalf("reimport linha %d devia ser já importada/ignorar: %+v", i, l)
+		}
 	}
 }
 

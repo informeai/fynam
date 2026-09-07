@@ -98,6 +98,16 @@ func (l Lancamento) Liquidado() bool {
 	return l.DataPagamento != ""
 }
 
+// ExtratoLinha é uma transação lida de um arquivo OFX, já normalizada.
+// É persistida (por conta + FITID) para deduplicar importações futuras.
+type ExtratoLinha struct {
+	FITID     string  `json:"fitid"`
+	Data      string  `json:"data"`  // "YYYY-MM-DD" (data de compensação no banco)
+	Valor     float64 `json:"valor"` // sempre positivo
+	Tipo      string  `json:"tipo"`  // "pagar" (débito) | "receber" (crédito)
+	Descricao string  `json:"descricao"`
+}
+
 // DerivarStatus calcula o status a partir das datas (e de DataConciliacao),
 // em vez de guardar um campo que poderia ficar desatualizado.
 //

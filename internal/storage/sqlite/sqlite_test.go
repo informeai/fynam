@@ -181,6 +181,7 @@ func TestUpgradeDeBancoAntigo(t *testing.T) {
 	s := novoStore(t)
 
 	if _, err := s.db.ExecContext(ctx, `
+		DROP TABLE IF EXISTS extrato_linhas;
 		DROP TABLE lancamentos;
 		DROP TABLE contas;
 		CREATE TABLE contas (
@@ -343,6 +344,53 @@ func TestDeleteContaBloqueadaComLancamentos(t *testing.T) {
 	}
 	if err := s.DeleteConta(ctx, conta.ID); err != nil {
 		t.Fatalf("DeleteConta após remover o lançamento: %v", err)
+	}
+}
+
+func TestExtratoLinhas(t *testing.T) {
+	ctx := context.Background()
+	s := novoStore(t)
+	emp := novaEmpresa(t, s, "Empresa A")
+
+	conta, err := s.CreateConta(ctx, emp, model.Conta{Nome: "Banco"})
+	if err != nil {
+		t.Fatalf("CreateConta: %v", err)
+	}
+	l, err := s.CreateLancamento(ctx, emp, model.Lancamento{
+		Tipo: "pagar", Descricao: "Fornecedor", ContaID: &conta.ID,
+		Valor: 100, DataVencimento: "2026-09-10",
+	})
+	if err != nil {
+		t.Fatalf("CreateLancamento: %v", err)
+	}
+
+	if fitids, _ := s.ExtratoFitidsImportados(ctx, conta.ID); len(fitids) != 0 {
+		t.Fatalf("conta nova não devia ter FITIDs: %v", fitids)
+	}
+
+	linha := model.ExtratoLinha{FITID: "F1", Data: "2026-09-09", Valor: 100, Tipo: "pagar", Descricao: "x"}
+	if err := s.RegistrarExtratoLinha(ctx, conta.ID, linha, &l.ID); err != nil {
+		t.Fatalf("RegistrarExtratoLinha: %v", err)
+	}
+	// idempotente: re-registrar (ex.: mudou de ignorada p/ conciliada) não duplica
+	if err := s.RegistrarExtratoLinha(ctx, conta.ID, linha, &l.ID); err != nil {
+		t.Fatalf("RegistrarExtratoLinha (upsert): %v", err)
+	}
+
+	fitids, err := s.ExtratoFitidsImportados(ctx, conta.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fitids) != 1 || !fitids["F1"] {
+		t.Fatalf("FITIDs importados = %v", fitids)
+	}
+
+	// linha sem FITID não é registrada (nada para deduplicar)
+	if err := s.RegistrarExtratoLinha(ctx, conta.ID, model.ExtratoLinha{Data: "2026-09-01"}, nil); err != nil {
+		t.Fatalf("RegistrarExtratoLinha sem FITID: %v", err)
+	}
+	if fitids, _ := s.ExtratoFitidsImportados(ctx, conta.ID); len(fitids) != 1 {
+		t.Fatalf("linha sem FITID não devia ser gravada: %v", fitids)
 	}
 }
 
