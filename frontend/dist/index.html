@@ -114,7 +114,7 @@
             <thead>
               <tr>
                 <th>Descrição</th><th>Categoria</th><th>Vencimento</th>
-                <th>Valor</th><th>Status</th><th></th>
+                <th>Pagamento</th><th>Valor</th><th>Status</th><th></th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -137,7 +137,7 @@
             <thead>
               <tr>
                 <th>Descrição</th><th>Categoria</th><th>Vencimento</th>
-                <th>Valor</th><th>Status</th><th></th>
+                <th>Recebimento</th><th>Valor</th><th>Status</th><th></th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -296,6 +296,10 @@
 
         <label>Vencimento</label>
         <input type="date" id="lanc-vencimento" required />
+
+        <label id="lanc-pagamento-label">Data de pagamento</label>
+        <input type="date" id="lanc-pagamento" />
+        <small class="field-hint">Deixe em branco enquanto não for pago / recebido.</small>
 
         <label>Observações</label>
         <textarea id="lanc-obs" rows="2"></textarea>

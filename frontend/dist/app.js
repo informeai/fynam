@@ -355,7 +355,7 @@
     tbody.innerHTML = '';
 
     if (itens.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">Nenhum lançamento encontrado.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-msg">Nenhum lançamento encontrado.</td></tr>';
       return;
     }
 
@@ -378,6 +378,7 @@
         <td>${escapeHtml(l.descricao)}</td>
         <td>${categoria ? escapeHtml(categoria.nome) : '—'}</td>
         <td>${fmtDate(l.dataVencimento)}</td>
+        <td>${l.dataPagamento ? fmtDate(l.dataPagamento) : '—'}</td>
         <td>${fmtMoney(l.valor)}</td>
         <td><span class="badge ${l.status}">${statusLabel(l.status)}</span></td>
         <td class="row-actions">
@@ -392,7 +393,13 @@
       btn.addEventListener('click', async () => {
         const id = Number(btn.dataset.id);
         const action = btn.dataset.action;
-        if (action === 'baixar') await App.MarcarBaixa(id, '');
+        if (action === 'baixar') {
+          const label = tipo === 'pagar' ? 'Data de pagamento' : 'Data de recebimento';
+          const titulo = tipo === 'pagar' ? 'Registrar pagamento' : 'Registrar recebimento';
+          const data = await askDate(titulo, label, hojeISO());
+          if (data === null) return;
+          await App.MarcarBaixa(id, data);
+        }
         if (action === 'estornar') await App.Estornar(id);
         if (action === 'conciliar') await App.Conciliar(id, '');
         if (action === 'desconciliar') await App.DesfazerConciliacao(id);
@@ -436,6 +443,8 @@
     document.getElementById('lanc-tipo').value = tipo;
     document.getElementById('modal-titulo').textContent =
       (id ? 'Editar' : 'Nova') + (tipo === 'pagar' ? ' conta a pagar' : ' conta a receber');
+    document.getElementById('lanc-pagamento-label').textContent =
+      tipo === 'pagar' ? 'Data de pagamento' : 'Data de recebimento';
 
     if (id) {
       const itens = await App.ListLancamentos({ tipo, status: '', dataInicio: '', dataFim: '' });
@@ -446,6 +455,7 @@
       document.getElementById('lanc-conta').value = l.contaId || '';
       document.getElementById('lanc-valor').value = l.valor;
       document.getElementById('lanc-vencimento').value = l.dataVencimento;
+      document.getElementById('lanc-pagamento').value = l.dataPagamento || '';
       document.getElementById('lanc-obs').value = l.observacoes || '';
     } else {
       document.getElementById('form-lancamento').reset();
@@ -466,6 +476,7 @@
       contaId: Number(document.getElementById('lanc-conta').value) || null,
       valor: Number(document.getElementById('lanc-valor').value),
       dataVencimento: document.getElementById('lanc-vencimento').value,
+      dataPagamento: document.getElementById('lanc-pagamento').value,
       observacoes: document.getElementById('lanc-obs').value.trim()
     };
 
@@ -485,7 +496,7 @@
 
   // Diálogos em DOM — o WKWebView do macOS não implementa window.prompt/confirm,
   // então esses helpers os substituem devolvendo uma Promise.
-  function askDialog({ title, message = '', input = false, value = '', label = 'Valor', okText = 'Confirmar', danger = false }) {
+  function askDialog({ title, message = '', input = false, inputType = 'text', value = '', label = 'Valor', okText = 'Confirmar', danger = false }) {
     return new Promise((resolve) => {
       const backdrop = document.getElementById('modal-ask');
       const field = document.getElementById('ask-field');
@@ -499,6 +510,7 @@
       msgEl.style.display = message ? 'block' : 'none';
       document.getElementById('ask-label').textContent = label;
       field.style.display = input ? 'flex' : 'none';
+      inp.type = inputType;
       inp.value = value || '';
       okBtn.textContent = okText;
       okBtn.style.background = danger ? 'var(--red)' : '';
@@ -521,12 +533,21 @@
       cancelBtn.addEventListener('click', onCancel);
       document.addEventListener('keydown', onKey);
       backdrop.classList.add('open');
-      if (input) setTimeout(() => { inp.focus(); inp.select(); }, 30);
+      if (input) setTimeout(() => {
+        inp.focus();
+        if (inp.type === 'text') inp.select();
+      }, 30);
     });
   }
 
   const askText = (title, label, value) => askDialog({ title, label, value, input: true });
+  const askDate = (title, label, value) => askDialog({ title, label, value, input: true, inputType: 'date' });
   const askConfirm = (title, message, okText = 'Confirmar') => askDialog({ title, message, okText, danger: true });
+
+  function hojeISO() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
 
   // ---------------------------------------------------------------
   // Fluxo de caixa

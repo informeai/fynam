@@ -195,6 +195,13 @@ persistido. A derivação usa as datas de vencimento/pagamento e mais um
 operador valida a conciliação (só possível depois da baixa). A ordem é:
 `conciliado` › `pago`/`recebido` › `atrasado`/`pendente`.
 
+`DataVencimento` é a data-limite; `DataPagamento` é a data **real** da
+liquidação (pagamento para "pagar", recebimento para "receber"), que não
+precisa coincidir com o vencimento. Ela pode ser informada no formulário
+de criar/editar (em branco = em aberto) ou ao clicar em **Pagar/Receber**,
+que pergunta a data (padrão: hoje). Limpá-la num lançamento conciliado
+também desfaz a conciliação.
+
 ### Exportação de relatórios (PDF, XLSX, CSV)
 
 As telas **Fluxo de Caixa**, **DRE**, **Contas a Pagar** e **Contas a

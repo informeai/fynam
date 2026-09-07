@@ -225,6 +225,48 @@ func TestConciliar(t *testing.T) {
 	}
 }
 
+func TestDataPagamentoPeloFormulario(t *testing.T) {
+	a := appDeTeste(t)
+	conta := contaDeTeste(t, a)
+
+	base := func(dataPagamento string) model.LancamentoInput {
+		return model.LancamentoInput{
+			Tipo: "receber", Descricao: "Adiantamento", ContaID: &conta,
+			Valor: 200, DataVencimento: "2026-07-31", DataPagamento: dataPagamento,
+		}
+	}
+
+	// criar já recebido, numa data diferente do vencimento
+	l, err := a.CreateLancamento(base("2026-07-10"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l.DataPagamento != "2026-07-10" || l.Status != "recebido" {
+		t.Fatalf("criar com dataPagamento: %+v", l)
+	}
+
+	// editar mudando só a data de recebimento
+	up, err := a.UpdateLancamento(l.ID, base("2026-07-12"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if up.DataPagamento != "2026-07-12" || up.Status != "recebido" {
+		t.Fatalf("editar dataPagamento: %+v", up)
+	}
+
+	// limpar a data pelo formulário reabre o lançamento e desfaz a conciliação
+	if _, err := a.Conciliar(l.ID, "2026-07-13"); err != nil {
+		t.Fatal(err)
+	}
+	limpo, err := a.UpdateLancamento(l.ID, base(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if limpo.DataPagamento != "" || limpo.DataConciliacao != "" || limpo.Status == "conciliado" {
+		t.Fatalf("limpar dataPagamento devia reabrir e desconciliar: %+v", limpo)
+	}
+}
+
 func TestMultiplasEmpresas(t *testing.T) {
 	a := appDeTeste(t)
 

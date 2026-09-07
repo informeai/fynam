@@ -186,7 +186,7 @@ func (a *App) CreateLancamento(in model.LancamentoInput) (model.Lancamento, erro
 		ContaID:        in.ContaID,
 		Valor:          in.Valor,
 		DataVencimento: in.DataVencimento,
-		DataPagamento:  "",
+		DataPagamento:  in.DataPagamento,
 		Observacoes:    in.Observacoes,
 	}
 	criado, err := a.store.CreateLancamento(a.c(), a.empresa(), l)
@@ -204,6 +204,8 @@ func (a *App) UpdateLancamento(id int, in model.LancamentoInput) (model.Lancamen
 	if err != nil {
 		return model.Lancamento{}, err
 	}
+	pagamentoMudou := in.DataPagamento != atual.DataPagamento
+
 	atual.Tipo = in.Tipo
 	atual.Descricao = in.Descricao
 	atual.CategoriaID = in.CategoriaID
@@ -215,6 +217,14 @@ func (a *App) UpdateLancamento(id int, in model.LancamentoInput) (model.Lancamen
 	salvo, err := a.store.UpdateLancamento(a.c(), atual)
 	if err != nil {
 		return model.Lancamento{}, err
+	}
+	// Data de pagamento/recebimento é gerida por SetPagamento (operação
+	// atômica que também desfaz a conciliação quando a data é limpa).
+	if pagamentoMudou {
+		salvo, err = a.store.SetPagamento(a.c(), id, in.DataPagamento)
+		if err != nil {
+			return model.Lancamento{}, err
+		}
 	}
 	return salvo.ComStatus(), nil
 }

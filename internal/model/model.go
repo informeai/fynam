@@ -64,6 +64,11 @@ type Lancamento struct {
 // LancamentoInput é o payload de criação/edição vindo do frontend.
 // ContaID é obrigatório (todo lançamento pertence a uma conta/caixa);
 // CategoriaID continua opcional.
+//
+// DataPagamento é a data real da liquidação (pagamento, se "pagar";
+// recebimento, se "receber") e é independente do vencimento. Vazia ("")
+// = ainda em aberto. Limpá-la num lançamento conciliado também desfaz a
+// conciliação.
 type LancamentoInput struct {
 	Tipo           string  `json:"tipo"`
 	Descricao      string  `json:"descricao"`
@@ -71,6 +76,7 @@ type LancamentoInput struct {
 	ContaID        *int    `json:"contaId"`
 	Valor          float64 `json:"valor"`
 	DataVencimento string  `json:"dataVencimento"`
+	DataPagamento  string  `json:"dataPagamento"`
 	Observacoes    string  `json:"observacoes"`
 }
 

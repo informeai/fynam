@@ -247,12 +247,13 @@ export namespace model {
 	    contaId?: number;
 	    valor: number;
 	    dataVencimento: string;
+	    dataPagamento: string;
 	    observacoes: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new LancamentoInput(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.tipo = source["tipo"];
@@ -261,6 +262,7 @@ export namespace model {
 	        this.contaId = source["contaId"];
 	        this.valor = source["valor"];
 	        this.dataVencimento = source["dataVencimento"];
+	        this.dataPagamento = source["dataPagamento"];
 	        this.observacoes = source["observacoes"];
 	    }
 	}
