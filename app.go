@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"sort"
 	"strconv"
@@ -213,9 +214,41 @@ func (a *App) MarcarBaixa(id int, dataPagamento string) (model.Lancamento, error
 	return l.ComStatus(), nil
 }
 
-// Estornar desfaz a baixa (volta o lançamento para em aberto).
+// Estornar desfaz a baixa (volta o lançamento para em aberto). Se o
+// lançamento estava conciliado, a conciliação também é desfeita.
 func (a *App) Estornar(id int) (model.Lancamento, error) {
 	l, err := a.store.SetPagamento(a.c(), id, "")
+	if err != nil {
+		return model.Lancamento{}, err
+	}
+	return l.ComStatus(), nil
+}
+
+// Conciliar marca o lançamento como conciliado — o status final, validado
+// pelo operador do app. Só é possível depois da baixa (pago/recebido).
+// dataConciliacao vazia = hoje.
+func (a *App) Conciliar(id int, dataConciliacao string) (model.Lancamento, error) {
+	atual, err := a.store.GetLancamento(a.c(), id)
+	if err != nil {
+		return model.Lancamento{}, err
+	}
+	if !atual.Liquidado() {
+		return model.Lancamento{}, errors.New("lançamento precisa estar pago ou recebido antes de conciliar")
+	}
+	if dataConciliacao == "" {
+		dataConciliacao = todayISO()
+	}
+	l, err := a.store.SetConciliacao(a.c(), id, dataConciliacao)
+	if err != nil {
+		return model.Lancamento{}, err
+	}
+	return l.ComStatus(), nil
+}
+
+// DesfazerConciliacao volta o lançamento de "conciliado" para
+// "pago"/"recebido" (a baixa é mantida).
+func (a *App) DesfazerConciliacao(id int) (model.Lancamento, error) {
+	l, err := a.store.SetConciliacao(a.c(), id, "")
 	if err != nil {
 		return model.Lancamento{}, err
 	}
@@ -254,10 +287,10 @@ func (a *App) DashboardResumo() (Resumo, error) {
 		case l.Tipo == "receber" && l.DataPagamento != "":
 			totalRecebido += l.Valor
 		}
-		if l.Tipo == "pagar" && l.Status != "pago" {
+		if l.Tipo == "pagar" && !l.Liquidado() {
 			totalAPagar += l.Valor
 		}
-		if l.Tipo == "receber" && l.Status != "recebido" {
+		if l.Tipo == "receber" && !l.Liquidado() {
 			totalAReceber += l.Valor
 		}
 	}
@@ -265,7 +298,7 @@ func (a *App) DashboardResumo() (Resumo, error) {
 
 	proximos := make([]model.Lancamento, 0)
 	for _, l := range lancs {
-		if l.Status != "pago" && l.Status != "recebido" {
+		if !l.Liquidado() {
 			proximos = append(proximos, l)
 		}
 	}

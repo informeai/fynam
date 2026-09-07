@@ -138,6 +138,72 @@ func TestFiltroPorStatusDerivado(t *testing.T) {
 	}
 }
 
+func TestConciliar(t *testing.T) {
+	a := appDeTeste(t)
+
+	l, err := a.CreateLancamento(model.LancamentoInput{
+		Tipo: "pagar", Descricao: "Fornecedor X", Valor: 120, DataVencimento: "2026-06-01",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// não dá pra conciliar antes da baixa
+	if _, err := a.Conciliar(l.ID, ""); err == nil {
+		t.Fatal("Conciliar devia recusar lançamento ainda não pago")
+	}
+
+	if _, err := a.MarcarBaixa(l.ID, "2026-06-02"); err != nil {
+		t.Fatal(err)
+	}
+	conc, err := a.Conciliar(l.ID, "2026-06-03")
+	if err != nil {
+		t.Fatalf("Conciliar: %v", err)
+	}
+	if conc.Status != "conciliado" || conc.DataConciliacao != "2026-06-03" {
+		t.Fatalf("após conciliar: status=%q dataConciliacao=%q", conc.Status, conc.DataConciliacao)
+	}
+
+	// filtro por status derivado "conciliado"
+	conciliados, err := a.ListLancamentos(model.LancamentoFiltro{Tipo: "pagar", Status: "conciliado"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(conciliados) != 1 || conciliados[0].ID != l.ID {
+		t.Fatalf("filtro status=conciliado: %+v", conciliados)
+	}
+
+	// não conta como "a pagar" no dashboard
+	resumo, err := a.DashboardResumo()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resumo.TotalAPagar != 0 {
+		t.Errorf("TotalAPagar = %v, esperado 0 (lançamento conciliado)", resumo.TotalAPagar)
+	}
+
+	// desfazer conciliação volta para "pago"
+	volta, err := a.DesfazerConciliacao(l.ID)
+	if err != nil {
+		t.Fatalf("DesfazerConciliacao: %v", err)
+	}
+	if volta.Status != "pago" || volta.DataConciliacao != "" {
+		t.Fatalf("após desfazer: status=%q dataConciliacao=%q", volta.Status, volta.DataConciliacao)
+	}
+
+	// estornar a baixa de um lançamento conciliado limpa tudo
+	if _, err := a.Conciliar(l.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	est, err := a.Estornar(l.ID)
+	if err != nil {
+		t.Fatalf("Estornar: %v", err)
+	}
+	if est.DataPagamento != "" || est.DataConciliacao != "" {
+		t.Fatalf("estorno devia limpar pagamento e conciliação: %+v", est)
+	}
+}
+
 func TestMultiplasEmpresas(t *testing.T) {
 	a := appDeTeste(t)
 

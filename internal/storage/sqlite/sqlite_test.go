@@ -239,5 +239,47 @@ func TestConfig(t *testing.T) {
 	}
 }
 
+func TestConciliacao(t *testing.T) {
+	ctx := context.Background()
+	s := novoStore(t)
+	emp := novaEmpresa(t, s, "Empresa A")
+
+	l, err := s.CreateLancamento(ctx, emp, model.Lancamento{
+		Tipo: "pagar", Descricao: "Fornecedor", Valor: 300, DataVencimento: "2026-09-10",
+	})
+	if err != nil {
+		t.Fatalf("CreateLancamento: %v", err)
+	}
+	if l.DataConciliacao != "" {
+		t.Fatalf("lançamento novo não devia vir conciliado: %q", l.DataConciliacao)
+	}
+
+	// baixa + conciliação
+	if _, err := s.SetPagamento(ctx, l.ID, "2026-09-08"); err != nil {
+		t.Fatalf("SetPagamento: %v", err)
+	}
+	got, err := s.SetConciliacao(ctx, l.ID, "2026-09-09")
+	if err != nil || got.DataConciliacao != "2026-09-09" {
+		t.Fatalf("SetConciliacao: %v data=%q", err, got.DataConciliacao)
+	}
+	if got.DerivarStatus() != "conciliado" {
+		t.Fatalf("status = %q, esperado conciliado", got.DerivarStatus())
+	}
+
+	// estornar a baixa também limpa a conciliação
+	got, err = s.SetPagamento(ctx, l.ID, "")
+	if err != nil {
+		t.Fatalf("estorno: %v", err)
+	}
+	if got.DataPagamento != "" || got.DataConciliacao != "" {
+		t.Fatalf("estorno devia limpar pagamento e conciliação: pag=%q conc=%q",
+			got.DataPagamento, got.DataConciliacao)
+	}
+
+	if _, err := s.SetConciliacao(ctx, 999, "2026-01-01"); !errors.Is(err, storage.ErrNaoEncontrado) {
+		t.Fatalf("SetConciliacao id inexistente: %v", err)
+	}
+}
+
 // garante, em tempo de compilação, que *Store satisfaz a interface.
 var _ storage.Store = (*Store)(nil)

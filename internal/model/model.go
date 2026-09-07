@@ -33,18 +33,23 @@ type Categoria struct {
 
 // Lancamento é uma conta a pagar ou a receber.
 // Tipo: "pagar" | "receber". DataPagamento vazia ("") significa em aberto.
-// Status é derivado das datas em tempo de leitura e nunca é persistido.
+//
+// Status é derivado em tempo de leitura e nunca é persistido. A derivação
+// usa as datas e mais um único fato guardado além delas: DataConciliacao,
+// preenchida quando o operador valida a conciliação do lançamento (só é
+// possível depois da baixa). DataConciliacao vazia ("") = não conciliado.
 type Lancamento struct {
-	ID             int     `json:"id"`
-	Tipo           string  `json:"tipo"`
-	Descricao      string  `json:"descricao"`
-	CategoriaID    *int    `json:"categoriaId"`
-	ContaID        *int    `json:"contaId"`
-	Valor          float64 `json:"valor"`
-	DataVencimento string  `json:"dataVencimento"`
-	DataPagamento  string  `json:"dataPagamento"`
-	Observacoes    string  `json:"observacoes"`
-	Status         string  `json:"status,omitempty"`
+	ID              int     `json:"id"`
+	Tipo            string  `json:"tipo"`
+	Descricao       string  `json:"descricao"`
+	CategoriaID     *int    `json:"categoriaId"`
+	ContaID         *int    `json:"contaId"`
+	Valor           float64 `json:"valor"`
+	DataVencimento  string  `json:"dataVencimento"`
+	DataPagamento   string  `json:"dataPagamento"`
+	DataConciliacao string  `json:"dataConciliacao"`
+	Observacoes     string  `json:"observacoes"`
+	Status          string  `json:"status,omitempty"`
 }
 
 // LancamentoInput é o payload de criação/edição vindo do frontend.
@@ -70,9 +75,21 @@ type LancamentoFiltro struct {
 	DataFim    string `json:"dataFim"`
 }
 
-// DerivarStatus calcula o status a partir das datas, em vez de guardar um
-// campo que poderia ficar desatualizado.
+// Liquidado indica que o lançamento já saiu do "em aberto" (foi baixado).
+// Vale tanto para "pago"/"recebido" quanto para "conciliado".
+func (l Lancamento) Liquidado() bool {
+	return l.DataPagamento != ""
+}
+
+// DerivarStatus calcula o status a partir das datas (e de DataConciliacao),
+// em vez de guardar um campo que poderia ficar desatualizado.
+//
+// A ordem importa: "conciliado" é o estado final e fica acima de
+// "pago"/"recebido"; estes, por sua vez, ficam acima de "atrasado"/"pendente".
 func (l Lancamento) DerivarStatus() string {
+	if l.DataConciliacao != "" {
+		return "conciliado"
+	}
 	if l.DataPagamento != "" {
 		if l.Tipo == "pagar" {
 			return "pago"

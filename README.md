@@ -141,7 +141,8 @@ volume exigir, elas podem descer para métodos específicos na interface.
 Regras do contrato (ver comentário em `internal/storage/storage.go`):
 `Create*` recebe a entidade sem id e devolve com o id atribuído; id
 inexistente → `ErrNaoEncontrado`; `Status` do lançamento nunca é
-persistido; remover conta/categoria **anula** a referência nos lançamentos
+persistido (mas `DataPagamento` e `DataConciliacao` são fatos e ficam
+gravados); remover conta/categoria **anula** a referência nos lançamentos
 (não os apaga).
 
 ### Múltiplas empresas / filiais
@@ -184,8 +185,12 @@ o frontend só chama `ListContas()` e recebe as contas da empresa ativa.
 | `VersaoAtual()` / `VerificarAtualizacao()` | versão em execução / checagem manual de update |
 | `BaixarEAplicarAtualizacao()` / `ReiniciarApp()` | instala a atualização e relança o app |
 
-O status de cada lançamento (`pendente`, `atrasado`, `pago`, `recebido`) é
-sempre **derivado das datas** em tempo de leitura e nunca é persistido.
+O status de cada lançamento (`pendente`, `atrasado`, `pago`, `recebido`,
+`conciliado`) é sempre **derivado** em tempo de leitura e nunca é
+persistido. A derivação usa as datas de vencimento/pagamento e mais um
+único fato guardado além delas: `DataConciliacao`, preenchida quando o
+operador valida a conciliação (só possível depois da baixa). A ordem é:
+`conciliado` › `pago`/`recebido` › `atrasado`/`pendente`.
 
 ### Exportação de relatórios (PDF, XLSX, CSV)
 
@@ -247,8 +252,9 @@ ele serve para a instalação inicial — o updater continua consumindo o `.zip`
 - **Dashboard** — saldo atual, total a pagar/receber em aberto, gráfico dos
   últimos 6 meses (entradas x saídas) e lista dos próximos vencimentos.
 - **Contas a Pagar / Contas a Receber** — cadastro, edição, exclusão,
-  filtro por status (pendente, atrasado, pago/recebido) e baixa (marcar
-  como pago/recebido, com opção de estornar).
+  filtro por status (pendente, atrasado, pago/recebido, conciliado), baixa
+  (marcar como pago/recebido, com opção de estornar) e conciliação (marcar
+  como conciliado quando o operador valida, com opção de desconciliar).
 - **Fluxo de Caixa** — visão mensal (ano selecionável) com entradas,
   saídas, saldo do mês e saldo acumulado.
 - **DRE simplificado** — por período, agrupado por categoria, com receita

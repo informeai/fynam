@@ -244,7 +244,10 @@
   }
 
   function statusLabel(status) {
-    return { pendente: 'Pendente', atrasado: 'Atrasado', pago: 'Pago', recebido: 'Recebido' }[status] || status;
+    return {
+      pendente: 'Pendente', atrasado: 'Atrasado', pago: 'Pago',
+      recebido: 'Recebido', conciliado: 'Conciliado'
+    }[status] || status;
   }
 
   // ---------------------------------------------------------------
@@ -324,7 +327,8 @@
     ['pagar', 'receber'].forEach((tipo) => {
       const wrap = document.querySelector(`.filters[data-filters="${tipo}"]`);
       const opcoes = [['todos', 'Todos'], ['pendente', 'Pendentes'], ['atrasado', 'Atrasados'],
-        [tipo === 'pagar' ? 'pago' : 'recebido', tipo === 'pagar' ? 'Pagos' : 'Recebidos']];
+        [tipo === 'pagar' ? 'pago' : 'recebido', tipo === 'pagar' ? 'Pagos' : 'Recebidos'],
+        ['conciliado', 'Conciliados']];
       opcoes.forEach(([valor, label]) => {
         const btn = document.createElement('button');
         btn.className = 'filter-btn' + (valor === 'todos' ? ' active' : '');
@@ -358,7 +362,18 @@
     itens.forEach((l) => {
       const categoria = state.categorias.find((c) => c.id === l.categoriaId);
       const tr = document.createElement('tr');
-      const jaBaixado = l.status === 'pago' || l.status === 'recebido';
+      const conciliado = l.status === 'conciliado';
+      const jaBaixado = conciliado || l.status === 'pago' || l.status === 'recebido';
+      let acoesStatus;
+      if (conciliado) {
+        acoesStatus = `<button class="icon-btn" data-action="desconciliar" data-id="${l.id}">Desconciliar</button>`;
+      } else if (jaBaixado) {
+        acoesStatus =
+          `<button class="icon-btn" data-action="conciliar" data-id="${l.id}">Conciliar</button>` +
+          `<button class="icon-btn" data-action="estornar" data-id="${l.id}">Estornar</button>`;
+      } else {
+        acoesStatus = `<button class="icon-btn" data-action="baixar" data-id="${l.id}">${tipo === 'pagar' ? 'Pagar' : 'Receber'}</button>`;
+      }
       tr.innerHTML = `
         <td>${escapeHtml(l.descricao)}</td>
         <td>${categoria ? escapeHtml(categoria.nome) : '—'}</td>
@@ -366,9 +381,7 @@
         <td>${fmtMoney(l.valor)}</td>
         <td><span class="badge ${l.status}">${statusLabel(l.status)}</span></td>
         <td class="row-actions">
-          ${jaBaixado
-            ? `<button class="icon-btn" data-action="estornar" data-id="${l.id}">Estornar</button>`
-            : `<button class="icon-btn" data-action="baixar" data-id="${l.id}">${tipo === 'pagar' ? 'Pagar' : 'Receber'}</button>`}
+          ${acoesStatus}
           <button class="icon-btn" data-action="editar" data-id="${l.id}" data-tipo="${tipo}">Editar</button>
           <button class="icon-btn danger" data-action="excluir" data-id="${l.id}">Excluir</button>
         </td>`;
@@ -381,6 +394,8 @@
         const action = btn.dataset.action;
         if (action === 'baixar') await App.MarcarBaixa(id, '');
         if (action === 'estornar') await App.Estornar(id);
+        if (action === 'conciliar') await App.Conciliar(id, '');
+        if (action === 'desconciliar') await App.DesfazerConciliacao(id);
         if (action === 'excluir') {
           if (await askConfirm('Excluir lançamento', 'Excluir este lançamento?', 'Excluir')) {
             await App.DeleteLancamento(id);

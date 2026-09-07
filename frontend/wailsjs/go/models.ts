@@ -193,6 +193,7 @@ export namespace model {
 	    valor: number;
 	    dataVencimento: string;
 	    dataPagamento: string;
+	    dataConciliacao: string;
 	    observacoes: string;
 	    status?: string;
 	
@@ -210,6 +211,7 @@ export namespace model {
 	        this.valor = source["valor"];
 	        this.dataVencimento = source["dataVencimento"];
 	        this.dataPagamento = source["dataPagamento"];
+	        this.dataConciliacao = source["dataConciliacao"];
 	        this.observacoes = source["observacoes"];
 	        this.status = source["status"];
 	    }

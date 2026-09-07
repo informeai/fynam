@@ -10,6 +10,10 @@ export function BaixarEAplicarAtualizacao() {
   return window['go']['main']['App']['BaixarEAplicarAtualizacao']();
 }
 
+export function Conciliar(arg1, arg2) {
+  return window['go']['main']['App']['Conciliar'](arg1, arg2);
+}
+
 export function CreateCategoria(arg1, arg2) {
   return window['go']['main']['App']['CreateCategoria'](arg1, arg2);
 }
@@ -40,6 +44,10 @@ export function DeleteConta(arg1) {
 
 export function DeleteLancamento(arg1) {
   return window['go']['main']['App']['DeleteLancamento'](arg1);
+}
+
+export function DesfazerConciliacao(arg1) {
+  return window['go']['main']['App']['DesfazerConciliacao'](arg1);
 }
 
 export function EmpresaAtiva() {

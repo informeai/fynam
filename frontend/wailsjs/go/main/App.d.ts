@@ -8,6 +8,8 @@ export function AtualizarEmpresa(arg1:number,arg2:string,arg3:string):Promise<mo
 
 export function BaixarEAplicarAtualizacao():Promise<void>;
 
+export function Conciliar(arg1:number,arg2:string):Promise<model.Lancamento>;
+
 export function CreateCategoria(arg1:string,arg2:string):Promise<model.Categoria>;
 
 export function CreateConta(arg1:string,arg2:number):Promise<model.Conta>;
@@ -23,6 +25,8 @@ export function DeleteCategoria(arg1:number):Promise<void>;
 export function DeleteConta(arg1:number):Promise<void>;
 
 export function DeleteLancamento(arg1:number):Promise<void>;
+
+export function DesfazerConciliacao(arg1:number):Promise<model.Lancamento>;
 
 export function EmpresaAtiva():Promise<model.Empresa>;
 

@@ -81,10 +81,11 @@ CREATE TABLE IF NOT EXISTS lancamentos (
     descricao       TEXT    NOT NULL,
     categoria_id    INTEGER REFERENCES categorias(id) ON DELETE SET NULL,
     conta_id        INTEGER REFERENCES contas(id)     ON DELETE SET NULL,
-    valor           REAL    NOT NULL DEFAULT 0,
-    data_vencimento TEXT    NOT NULL,
-    data_pagamento  TEXT    NOT NULL DEFAULT '',
-    observacoes     TEXT    NOT NULL DEFAULT ''
+    valor            REAL    NOT NULL DEFAULT 0,
+    data_vencimento  TEXT    NOT NULL,
+    data_pagamento   TEXT    NOT NULL DEFAULT '',
+    data_conciliacao TEXT    NOT NULL DEFAULT '',
+    observacoes      TEXT    NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_lancamentos_venc ON lancamentos(data_vencimento);
 CREATE INDEX IF NOT EXISTS idx_lancamentos_tipo ON lancamentos(tipo);
@@ -110,6 +111,11 @@ func (s *Store) migrate(ctx context.Context) error {
 			"ALTER TABLE "+tab+" ADD COLUMN empresa_id INTEGER REFERENCES empresas(id) ON DELETE CASCADE"); err != nil {
 			return err
 		}
+	}
+	// Bancos criados antes do status "conciliado" não têm data_conciliacao.
+	if err := s.garantirColuna(ctx, "lancamentos", "data_conciliacao",
+		"ALTER TABLE lancamentos ADD COLUMN data_conciliacao TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
 	}
 	if _, err := s.db.ExecContext(ctx, schemaIndicesEmpresa); err != nil {
 		return err
@@ -380,7 +386,7 @@ func (s *Store) DeleteCategoria(ctx context.Context, id int) error {
 // Lançamentos
 // ---------------------------------------------------------------------
 
-const lancamentoCols = `id, tipo, descricao, categoria_id, conta_id, valor, data_vencimento, data_pagamento, observacoes`
+const lancamentoCols = `id, tipo, descricao, categoria_id, conta_id, valor, data_vencimento, data_pagamento, data_conciliacao, observacoes`
 
 func scanLancamento(sc interface{ Scan(...any) error }) (model.Lancamento, error) {
 	var (
@@ -388,7 +394,7 @@ func scanLancamento(sc interface{ Scan(...any) error }) (model.Lancamento, error
 		catID, ctID sql.NullInt64
 	)
 	err := sc.Scan(&l.ID, &l.Tipo, &l.Descricao, &catID, &ctID,
-		&l.Valor, &l.DataVencimento, &l.DataPagamento, &l.Observacoes)
+		&l.Valor, &l.DataVencimento, &l.DataPagamento, &l.DataConciliacao, &l.Observacoes)
 	if err != nil {
 		return model.Lancamento{}, err
 	}
@@ -447,10 +453,10 @@ func (s *Store) GetLancamento(ctx context.Context, id int) (model.Lancamento, er
 func (s *Store) CreateLancamento(ctx context.Context, empresaID int, l model.Lancamento) (model.Lancamento, error) {
 	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO lancamentos
-		 (empresa_id, tipo, descricao, categoria_id, conta_id, valor, data_vencimento, data_pagamento, observacoes)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 (empresa_id, tipo, descricao, categoria_id, conta_id, valor, data_vencimento, data_pagamento, data_conciliacao, observacoes)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		empresaID, l.Tipo, l.Descricao, toNullInt(l.CategoriaID), toNullInt(l.ContaID),
-		l.Valor, l.DataVencimento, l.DataPagamento, l.Observacoes)
+		l.Valor, l.DataVencimento, l.DataPagamento, l.DataConciliacao, l.Observacoes)
 	if err != nil {
 		return model.Lancamento{}, err
 	}
@@ -485,8 +491,27 @@ func (s *Store) DeleteLancamento(ctx context.Context, id int) error {
 }
 
 func (s *Store) SetPagamento(ctx context.Context, id int, dataPagamento string) (model.Lancamento, error) {
+	// Desfazer a baixa (data == "") também limpa a conciliação: não pode
+	// existir lançamento conciliado sem pagamento.
+	q := `UPDATE lancamentos SET data_pagamento = ? WHERE id = ?`
+	args := []any{dataPagamento, id}
+	if dataPagamento == "" {
+		q = `UPDATE lancamentos SET data_pagamento = '', data_conciliacao = '' WHERE id = ?`
+		args = []any{id}
+	}
+	res, err := s.db.ExecContext(ctx, q, args...)
+	if err != nil {
+		return model.Lancamento{}, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return model.Lancamento{}, storage.ErrNaoEncontrado
+	}
+	return s.GetLancamento(ctx, id)
+}
+
+func (s *Store) SetConciliacao(ctx context.Context, id int, dataConciliacao string) (model.Lancamento, error) {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE lancamentos SET data_pagamento = ? WHERE id = ?`, dataPagamento, id)
+		`UPDATE lancamentos SET data_conciliacao = ? WHERE id = ?`, dataConciliacao, id)
 	if err != nil {
 		return model.Lancamento{}, err
 	}

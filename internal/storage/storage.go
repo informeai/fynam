@@ -11,6 +11,7 @@
 //     entidade já com o id atribuído pelo repositório.
 //   - Operação sobre id inexistente devolve ErrNaoEncontrado.
 //   - Nenhuma implementação deve persistir Lancamento.Status (é derivado).
+//     DataPagamento e DataConciliacao, sim, são fatos e devem ser gravados.
 //   - ListLancamentos aplica apenas os filtros "estruturais" (Tipo,
 //     DataInicio, DataFim). O filtro por Status é responsabilidade da
 //     camada de aplicação, pois Status é calculado.
@@ -76,6 +77,11 @@ type Store interface {
 	DeleteLancamento(ctx context.Context, id int) error
 
 	// SetPagamento marca (data != "") ou desfaz (data == "") a baixa de um
-	// lançamento, de forma atômica.
+	// lançamento, de forma atômica. Desfazer a baixa também limpa a
+	// conciliação (não pode haver lançamento conciliado sem pagamento).
 	SetPagamento(ctx context.Context, id int, dataPagamento string) (model.Lancamento, error)
+
+	// SetConciliacao marca (data != "") ou desfaz (data == "") a conciliação
+	// de um lançamento, de forma atômica.
+	SetConciliacao(ctx context.Context, id int, dataConciliacao string) (model.Lancamento, error)
 }
