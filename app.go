@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"sort"
 	"strconv"
@@ -109,12 +110,18 @@ func (a *App) ListContas() ([]model.Conta, error) {
 	return a.store.ListContas(a.c(), a.empresa())
 }
 
-func (a *App) CreateConta(nome string, saldoInicial float64) (model.Conta, error) {
-	return a.store.CreateConta(a.c(), a.empresa(), model.Conta{Nome: nome, SaldoInicial: saldoInicial})
+func (a *App) CreateConta(nome string, saldoInicial float64, bankID, acctID, acctType string) (model.Conta, error) {
+	return a.store.CreateConta(a.c(), a.empresa(), model.Conta{
+		Nome: nome, SaldoInicial: saldoInicial,
+		BankID: bankID, AcctID: acctID, AcctType: acctType,
+	})
 }
 
-func (a *App) UpdateConta(id int, nome string, saldoInicial float64) (model.Conta, error) {
-	return a.store.UpdateConta(a.c(), model.Conta{ID: id, Nome: nome, SaldoInicial: saldoInicial})
+func (a *App) UpdateConta(id int, nome string, saldoInicial float64, bankID, acctID, acctType string) (model.Conta, error) {
+	return a.store.UpdateConta(a.c(), model.Conta{
+		ID: id, Nome: nome, SaldoInicial: saldoInicial,
+		BankID: bankID, AcctID: acctID, AcctType: acctType,
+	})
 }
 
 func (a *App) DeleteConta(id int) error {
@@ -159,7 +166,19 @@ func (a *App) ListLancamentos(filtro model.LancamentoFiltro) ([]model.Lancamento
 	return out, nil
 }
 
+// validarLancamentoInput garante as regras que independem do backend de
+// persistência. Hoje: todo lançamento pertence a uma conta/caixa.
+func validarLancamentoInput(in model.LancamentoInput) error {
+	if in.ContaID == nil {
+		return errors.New("selecione a conta / caixa do lançamento")
+	}
+	return nil
+}
+
 func (a *App) CreateLancamento(in model.LancamentoInput) (model.Lancamento, error) {
+	if err := validarLancamentoInput(in); err != nil {
+		return model.Lancamento{}, err
+	}
 	l := model.Lancamento{
 		Tipo:           in.Tipo,
 		Descricao:      in.Descricao,
@@ -167,7 +186,7 @@ func (a *App) CreateLancamento(in model.LancamentoInput) (model.Lancamento, erro
 		ContaID:        in.ContaID,
 		Valor:          in.Valor,
 		DataVencimento: in.DataVencimento,
-		DataPagamento:  "",
+		DataPagamento:  in.DataPagamento,
 		Observacoes:    in.Observacoes,
 	}
 	criado, err := a.store.CreateLancamento(a.c(), a.empresa(), l)
@@ -178,10 +197,15 @@ func (a *App) CreateLancamento(in model.LancamentoInput) (model.Lancamento, erro
 }
 
 func (a *App) UpdateLancamento(id int, in model.LancamentoInput) (model.Lancamento, error) {
+	if err := validarLancamentoInput(in); err != nil {
+		return model.Lancamento{}, err
+	}
 	atual, err := a.store.GetLancamento(a.c(), id)
 	if err != nil {
 		return model.Lancamento{}, err
 	}
+	pagamentoMudou := in.DataPagamento != atual.DataPagamento
+
 	atual.Tipo = in.Tipo
 	atual.Descricao = in.Descricao
 	atual.CategoriaID = in.CategoriaID
@@ -193,6 +217,14 @@ func (a *App) UpdateLancamento(id int, in model.LancamentoInput) (model.Lancamen
 	salvo, err := a.store.UpdateLancamento(a.c(), atual)
 	if err != nil {
 		return model.Lancamento{}, err
+	}
+	// Data de pagamento/recebimento é gerida por SetPagamento (operação
+	// atômica que também desfaz a conciliação quando a data é limpa).
+	if pagamentoMudou {
+		salvo, err = a.store.SetPagamento(a.c(), id, in.DataPagamento)
+		if err != nil {
+			return model.Lancamento{}, err
+		}
 	}
 	return salvo.ComStatus(), nil
 }
@@ -213,9 +245,41 @@ func (a *App) MarcarBaixa(id int, dataPagamento string) (model.Lancamento, error
 	return l.ComStatus(), nil
 }
 
-// Estornar desfaz a baixa (volta o lançamento para em aberto).
+// Estornar desfaz a baixa (volta o lançamento para em aberto). Se o
+// lançamento estava conciliado, a conciliação também é desfeita.
 func (a *App) Estornar(id int) (model.Lancamento, error) {
 	l, err := a.store.SetPagamento(a.c(), id, "")
+	if err != nil {
+		return model.Lancamento{}, err
+	}
+	return l.ComStatus(), nil
+}
+
+// Conciliar marca o lançamento como conciliado — o status final, validado
+// pelo operador do app. Só é possível depois da baixa (pago/recebido).
+// dataConciliacao vazia = hoje.
+func (a *App) Conciliar(id int, dataConciliacao string) (model.Lancamento, error) {
+	atual, err := a.store.GetLancamento(a.c(), id)
+	if err != nil {
+		return model.Lancamento{}, err
+	}
+	if !atual.Liquidado() {
+		return model.Lancamento{}, errors.New("lançamento precisa estar pago ou recebido antes de conciliar")
+	}
+	if dataConciliacao == "" {
+		dataConciliacao = todayISO()
+	}
+	l, err := a.store.SetConciliacao(a.c(), id, dataConciliacao)
+	if err != nil {
+		return model.Lancamento{}, err
+	}
+	return l.ComStatus(), nil
+}
+
+// DesfazerConciliacao volta o lançamento de "conciliado" para
+// "pago"/"recebido" (a baixa é mantida).
+func (a *App) DesfazerConciliacao(id int) (model.Lancamento, error) {
+	l, err := a.store.SetConciliacao(a.c(), id, "")
 	if err != nil {
 		return model.Lancamento{}, err
 	}
@@ -254,10 +318,10 @@ func (a *App) DashboardResumo() (Resumo, error) {
 		case l.Tipo == "receber" && l.DataPagamento != "":
 			totalRecebido += l.Valor
 		}
-		if l.Tipo == "pagar" && l.Status != "pago" {
+		if l.Tipo == "pagar" && !l.Liquidado() {
 			totalAPagar += l.Valor
 		}
-		if l.Tipo == "receber" && l.Status != "recebido" {
+		if l.Tipo == "receber" && !l.Liquidado() {
 			totalAReceber += l.Valor
 		}
 	}
@@ -265,7 +329,7 @@ func (a *App) DashboardResumo() (Resumo, error) {
 
 	proximos := make([]model.Lancamento, 0)
 	for _, l := range lancs {
-		if l.Status != "pago" && l.Status != "recebido" {
+		if !l.Liquidado() {
 			proximos = append(proximos, l)
 		}
 	}

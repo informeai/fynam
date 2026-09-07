@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	_ "modernc.org/sqlite"
 
@@ -66,7 +67,10 @@ CREATE TABLE IF NOT EXISTS contas (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     empresa_id    INTEGER REFERENCES empresas(id) ON DELETE CASCADE,
     nome          TEXT    NOT NULL,
-    saldo_inicial REAL    NOT NULL DEFAULT 0
+    saldo_inicial REAL    NOT NULL DEFAULT 0,
+    bank_id       TEXT    NOT NULL DEFAULT '',
+    acct_id       TEXT    NOT NULL DEFAULT '',
+    acct_type     TEXT    NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS categorias (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -81,13 +85,27 @@ CREATE TABLE IF NOT EXISTS lancamentos (
     descricao       TEXT    NOT NULL,
     categoria_id    INTEGER REFERENCES categorias(id) ON DELETE SET NULL,
     conta_id        INTEGER REFERENCES contas(id)     ON DELETE SET NULL,
-    valor           REAL    NOT NULL DEFAULT 0,
-    data_vencimento TEXT    NOT NULL,
-    data_pagamento  TEXT    NOT NULL DEFAULT '',
-    observacoes     TEXT    NOT NULL DEFAULT ''
+    valor            REAL    NOT NULL DEFAULT 0,
+    data_vencimento  TEXT    NOT NULL,
+    data_pagamento   TEXT    NOT NULL DEFAULT '',
+    data_conciliacao TEXT    NOT NULL DEFAULT '',
+    observacoes      TEXT    NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_lancamentos_venc ON lancamentos(data_vencimento);
 CREATE INDEX IF NOT EXISTS idx_lancamentos_tipo ON lancamentos(tipo);
+CREATE TABLE IF NOT EXISTS extrato_linhas (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    conta_id      INTEGER NOT NULL REFERENCES contas(id)     ON DELETE CASCADE,
+    fitid         TEXT    NOT NULL,
+    data          TEXT    NOT NULL DEFAULT '',
+    valor         REAL    NOT NULL DEFAULT 0,
+    tipo          TEXT    NOT NULL DEFAULT '',
+    descricao     TEXT    NOT NULL DEFAULT '',
+    lancamento_id INTEGER REFERENCES lancamentos(id)         ON DELETE SET NULL,
+    status        TEXT    NOT NULL DEFAULT '',
+    importado_em  TEXT    NOT NULL DEFAULT ''
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_extrato_conta_fitid ON extrato_linhas(conta_id, fitid);
 `
 
 // schemaIndicesEmpresa só pode rodar depois que a coluna empresa_id existe
@@ -110,6 +128,24 @@ func (s *Store) migrate(ctx context.Context) error {
 			"ALTER TABLE "+tab+" ADD COLUMN empresa_id INTEGER REFERENCES empresas(id) ON DELETE CASCADE"); err != nil {
 			return err
 		}
+	}
+	// Bancos criados antes do status "conciliado" não têm data_conciliacao.
+	if err := s.garantirColuna(ctx, "lancamentos", "data_conciliacao",
+		"ALTER TABLE lancamentos ADD COLUMN data_conciliacao TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	// Bancos criados antes da conciliação por extrato não têm os
+	// identificadores bancários na conta.
+	for _, col := range []string{"bank_id", "acct_id", "acct_type"} {
+		if err := s.garantirColuna(ctx, "contas", col,
+			"ALTER TABLE contas ADD COLUMN "+col+" TEXT NOT NULL DEFAULT ''"); err != nil {
+			return err
+		}
+	}
+	// extrato_linhas da v1 inicial não tinha a coluna status.
+	if err := s.garantirColuna(ctx, "extrato_linhas", "status",
+		"ALTER TABLE extrato_linhas ADD COLUMN status TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
 	}
 	if _, err := s.db.ExecContext(ctx, schemaIndicesEmpresa); err != nil {
 		return err
@@ -272,9 +308,17 @@ func (s *Store) SetConfig(ctx context.Context, chave, valor string) error {
 // Contas
 // ---------------------------------------------------------------------
 
+const contaCols = `id, nome, saldo_inicial, bank_id, acct_id, acct_type`
+
+func scanConta(sc interface{ Scan(...any) error }) (model.Conta, error) {
+	var c model.Conta
+	err := sc.Scan(&c.ID, &c.Nome, &c.SaldoInicial, &c.BankID, &c.AcctID, &c.AcctType)
+	return c, err
+}
+
 func (s *Store) ListContas(ctx context.Context, empresaID int) ([]model.Conta, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, nome, saldo_inicial FROM contas WHERE empresa_id = ? ORDER BY id`, empresaID)
+		`SELECT `+contaCols+` FROM contas WHERE empresa_id = ? ORDER BY id`, empresaID)
 	if err != nil {
 		return nil, err
 	}
@@ -282,8 +326,8 @@ func (s *Store) ListContas(ctx context.Context, empresaID int) ([]model.Conta, e
 
 	out := []model.Conta{}
 	for rows.Next() {
-		var c model.Conta
-		if err := rows.Scan(&c.ID, &c.Nome, &c.SaldoInicial); err != nil {
+		c, err := scanConta(rows)
+		if err != nil {
 			return nil, err
 		}
 		out = append(out, c)
@@ -292,10 +336,8 @@ func (s *Store) ListContas(ctx context.Context, empresaID int) ([]model.Conta, e
 }
 
 func (s *Store) GetConta(ctx context.Context, id int) (model.Conta, error) {
-	var c model.Conta
-	err := s.db.QueryRowContext(ctx,
-		`SELECT id, nome, saldo_inicial FROM contas WHERE id = ?`, id).
-		Scan(&c.ID, &c.Nome, &c.SaldoInicial)
+	c, err := scanConta(s.db.QueryRowContext(ctx,
+		`SELECT `+contaCols+` FROM contas WHERE id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.Conta{}, storage.ErrNaoEncontrado
 	}
@@ -304,8 +346,9 @@ func (s *Store) GetConta(ctx context.Context, id int) (model.Conta, error) {
 
 func (s *Store) CreateConta(ctx context.Context, empresaID int, c model.Conta) (model.Conta, error) {
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO contas (empresa_id, nome, saldo_inicial) VALUES (?, ?, ?)`,
-		empresaID, c.Nome, c.SaldoInicial)
+		`INSERT INTO contas (empresa_id, nome, saldo_inicial, bank_id, acct_id, acct_type)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		empresaID, c.Nome, c.SaldoInicial, c.BankID, c.AcctID, c.AcctType)
 	if err != nil {
 		return model.Conta{}, err
 	}
@@ -319,7 +362,9 @@ func (s *Store) CreateConta(ctx context.Context, empresaID int, c model.Conta) (
 
 func (s *Store) UpdateConta(ctx context.Context, c model.Conta) (model.Conta, error) {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE contas SET nome = ?, saldo_inicial = ? WHERE id = ?`, c.Nome, c.SaldoInicial, c.ID)
+		`UPDATE contas SET nome = ?, saldo_inicial = ?, bank_id = ?, acct_id = ?, acct_type = ?
+		 WHERE id = ?`,
+		c.Nome, c.SaldoInicial, c.BankID, c.AcctID, c.AcctType, c.ID)
 	if err != nil {
 		return model.Conta{}, err
 	}
@@ -330,6 +375,14 @@ func (s *Store) UpdateConta(ctx context.Context, c model.Conta) (model.Conta, er
 }
 
 func (s *Store) DeleteConta(ctx context.Context, id int) error {
+	var vinculados int
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM lancamentos WHERE conta_id = ?`, id).Scan(&vinculados); err != nil {
+		return err
+	}
+	if vinculados > 0 {
+		return storage.ErrContaEmUso
+	}
 	_, err := s.db.ExecContext(ctx, `DELETE FROM contas WHERE id = ?`, id)
 	return err
 }
@@ -380,7 +433,7 @@ func (s *Store) DeleteCategoria(ctx context.Context, id int) error {
 // Lançamentos
 // ---------------------------------------------------------------------
 
-const lancamentoCols = `id, tipo, descricao, categoria_id, conta_id, valor, data_vencimento, data_pagamento, observacoes`
+const lancamentoCols = `id, tipo, descricao, categoria_id, conta_id, valor, data_vencimento, data_pagamento, data_conciliacao, observacoes`
 
 func scanLancamento(sc interface{ Scan(...any) error }) (model.Lancamento, error) {
 	var (
@@ -388,7 +441,7 @@ func scanLancamento(sc interface{ Scan(...any) error }) (model.Lancamento, error
 		catID, ctID sql.NullInt64
 	)
 	err := sc.Scan(&l.ID, &l.Tipo, &l.Descricao, &catID, &ctID,
-		&l.Valor, &l.DataVencimento, &l.DataPagamento, &l.Observacoes)
+		&l.Valor, &l.DataVencimento, &l.DataPagamento, &l.DataConciliacao, &l.Observacoes)
 	if err != nil {
 		return model.Lancamento{}, err
 	}
@@ -447,10 +500,10 @@ func (s *Store) GetLancamento(ctx context.Context, id int) (model.Lancamento, er
 func (s *Store) CreateLancamento(ctx context.Context, empresaID int, l model.Lancamento) (model.Lancamento, error) {
 	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO lancamentos
-		 (empresa_id, tipo, descricao, categoria_id, conta_id, valor, data_vencimento, data_pagamento, observacoes)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 (empresa_id, tipo, descricao, categoria_id, conta_id, valor, data_vencimento, data_pagamento, data_conciliacao, observacoes)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		empresaID, l.Tipo, l.Descricao, toNullInt(l.CategoriaID), toNullInt(l.ContaID),
-		l.Valor, l.DataVencimento, l.DataPagamento, l.Observacoes)
+		l.Valor, l.DataVencimento, l.DataPagamento, l.DataConciliacao, l.Observacoes)
 	if err != nil {
 		return model.Lancamento{}, err
 	}
@@ -485,8 +538,15 @@ func (s *Store) DeleteLancamento(ctx context.Context, id int) error {
 }
 
 func (s *Store) SetPagamento(ctx context.Context, id int, dataPagamento string) (model.Lancamento, error) {
-	res, err := s.db.ExecContext(ctx,
-		`UPDATE lancamentos SET data_pagamento = ? WHERE id = ?`, dataPagamento, id)
+	// Desfazer a baixa (data == "") também limpa a conciliação: não pode
+	// existir lançamento conciliado sem pagamento.
+	q := `UPDATE lancamentos SET data_pagamento = ? WHERE id = ?`
+	args := []any{dataPagamento, id}
+	if dataPagamento == "" {
+		q = `UPDATE lancamentos SET data_pagamento = '', data_conciliacao = '' WHERE id = ?`
+		args = []any{id}
+	}
+	res, err := s.db.ExecContext(ctx, q, args...)
 	if err != nil {
 		return model.Lancamento{}, err
 	}
@@ -494,4 +554,59 @@ func (s *Store) SetPagamento(ctx context.Context, id int, dataPagamento string) 
 		return model.Lancamento{}, storage.ErrNaoEncontrado
 	}
 	return s.GetLancamento(ctx, id)
+}
+
+func (s *Store) SetConciliacao(ctx context.Context, id int, dataConciliacao string) (model.Lancamento, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE lancamentos SET data_conciliacao = ? WHERE id = ?`, dataConciliacao, id)
+	if err != nil {
+		return model.Lancamento{}, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return model.Lancamento{}, storage.ErrNaoEncontrado
+	}
+	return s.GetLancamento(ctx, id)
+}
+
+// ---------------------------------------------------------------------
+// Extrato OFX
+// ---------------------------------------------------------------------
+
+func (s *Store) ExtratoRegistrosPorFitid(ctx context.Context, contaID int) (map[string]model.ExtratoRegistro, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT fitid, status, lancamento_id FROM extrato_linhas WHERE conta_id = ?`, contaID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := map[string]model.ExtratoRegistro{}
+	for rows.Next() {
+		var (
+			fitid, status string
+			lancID        sql.NullInt64
+		)
+		if err := rows.Scan(&fitid, &status, &lancID); err != nil {
+			return nil, err
+		}
+		out[fitid] = model.ExtratoRegistro{Status: status, LancamentoID: fromNullInt(lancID)}
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) RegistrarExtratoLinha(ctx context.Context, contaID int, l model.ExtratoLinha, status string, lancamentoID *int) error {
+	if l.FITID == "" {
+		return nil // sem FITID não há como deduplicar; nada a registrar
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO extrato_linhas
+		   (conta_id, fitid, data, valor, tipo, descricao, lancamento_id, status, importado_em)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(conta_id, fitid) DO UPDATE SET
+		   lancamento_id = excluded.lancamento_id,
+		   status        = excluded.status,
+		   importado_em  = excluded.importado_em`,
+		contaID, l.FITID, l.Data, l.Valor, l.Tipo, l.Descricao,
+		toNullInt(lancamentoID), status, time.Now().UTC().Format(time.RFC3339))
+	return err
 }

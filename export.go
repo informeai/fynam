@@ -199,6 +199,11 @@ func tabelaLancamentos(filtro model.LancamentoFiltro, itens []model.Lancamento, 
 		partesSub = append(partesSub, "Todos os registros")
 	}
 
+	colLiquidacao := "Pagamento"
+	if filtro.Tipo == "receber" {
+		colLiquidacao = "Recebimento"
+	}
+
 	t := report.Tabela{
 		Titulo:    titulo,
 		Subtitulo: strings.Join(partesSub, " · "),
@@ -206,7 +211,7 @@ func tabelaLancamentos(filtro model.LancamentoFiltro, itens []model.Lancamento, 
 			{Titulo: "Descrição", Alinhar: report.Esquerda, Peso: 2.4},
 			{Titulo: "Categoria", Alinhar: report.Esquerda, Peso: 1.6},
 			{Titulo: "Vencimento", Alinhar: report.Centro, Peso: 1},
-			{Titulo: "Pagamento", Alinhar: report.Centro, Peso: 1},
+			{Titulo: colLiquidacao, Alinhar: report.Centro, Peso: 1},
 			{Titulo: "Valor", Alinhar: report.Direita, Peso: 1.1},
 			{Titulo: "Status", Alinhar: report.Esquerda, Peso: 1},
 		},

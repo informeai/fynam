@@ -46,6 +46,8 @@ func rotuloStatus(status string) string {
 		return "Pago"
 	case "recebido":
 		return "Recebido"
+	case "conciliado":
+		return "Conciliado"
 	default:
 		return status
 	}

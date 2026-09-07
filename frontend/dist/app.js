@@ -244,7 +244,10 @@
   }
 
   function statusLabel(status) {
-    return { pendente: 'Pendente', atrasado: 'Atrasado', pago: 'Pago', recebido: 'Recebido' }[status] || status;
+    return {
+      pendente: 'Pendente', atrasado: 'Atrasado', pago: 'Pago',
+      recebido: 'Recebido', conciliado: 'Conciliado'
+    }[status] || status;
   }
 
   // ---------------------------------------------------------------
@@ -324,7 +327,8 @@
     ['pagar', 'receber'].forEach((tipo) => {
       const wrap = document.querySelector(`.filters[data-filters="${tipo}"]`);
       const opcoes = [['todos', 'Todos'], ['pendente', 'Pendentes'], ['atrasado', 'Atrasados'],
-        [tipo === 'pagar' ? 'pago' : 'recebido', tipo === 'pagar' ? 'Pagos' : 'Recebidos']];
+        [tipo === 'pagar' ? 'pago' : 'recebido', tipo === 'pagar' ? 'Pagos' : 'Recebidos'],
+        ['conciliado', 'Conciliados']];
       opcoes.forEach(([valor, label]) => {
         const btn = document.createElement('button');
         btn.className = 'filter-btn' + (valor === 'todos' ? ' active' : '');
@@ -351,24 +355,34 @@
     tbody.innerHTML = '';
 
     if (itens.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">Nenhum lançamento encontrado.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-msg">Nenhum lançamento encontrado.</td></tr>';
       return;
     }
 
     itens.forEach((l) => {
       const categoria = state.categorias.find((c) => c.id === l.categoriaId);
       const tr = document.createElement('tr');
-      const jaBaixado = l.status === 'pago' || l.status === 'recebido';
+      const conciliado = l.status === 'conciliado';
+      const jaBaixado = conciliado || l.status === 'pago' || l.status === 'recebido';
+      let acoesStatus;
+      if (conciliado) {
+        acoesStatus = `<button class="icon-btn" data-action="desconciliar" data-id="${l.id}">Desconciliar</button>`;
+      } else if (jaBaixado) {
+        acoesStatus =
+          `<button class="icon-btn" data-action="conciliar" data-id="${l.id}">Conciliar</button>` +
+          `<button class="icon-btn" data-action="estornar" data-id="${l.id}">Estornar</button>`;
+      } else {
+        acoesStatus = `<button class="icon-btn" data-action="baixar" data-id="${l.id}">${tipo === 'pagar' ? 'Pagar' : 'Receber'}</button>`;
+      }
       tr.innerHTML = `
         <td>${escapeHtml(l.descricao)}</td>
         <td>${categoria ? escapeHtml(categoria.nome) : '—'}</td>
         <td>${fmtDate(l.dataVencimento)}</td>
+        <td>${l.dataPagamento ? fmtDate(l.dataPagamento) : '—'}</td>
         <td>${fmtMoney(l.valor)}</td>
         <td><span class="badge ${l.status}">${statusLabel(l.status)}</span></td>
         <td class="row-actions">
-          ${jaBaixado
-            ? `<button class="icon-btn" data-action="estornar" data-id="${l.id}">Estornar</button>`
-            : `<button class="icon-btn" data-action="baixar" data-id="${l.id}">${tipo === 'pagar' ? 'Pagar' : 'Receber'}</button>`}
+          ${acoesStatus}
           <button class="icon-btn" data-action="editar" data-id="${l.id}" data-tipo="${tipo}">Editar</button>
           <button class="icon-btn danger" data-action="excluir" data-id="${l.id}">Excluir</button>
         </td>`;
@@ -379,8 +393,16 @@
       btn.addEventListener('click', async () => {
         const id = Number(btn.dataset.id);
         const action = btn.dataset.action;
-        if (action === 'baixar') await App.MarcarBaixa(id, '');
+        if (action === 'baixar') {
+          const label = tipo === 'pagar' ? 'Data de pagamento' : 'Data de recebimento';
+          const titulo = tipo === 'pagar' ? 'Registrar pagamento' : 'Registrar recebimento';
+          const data = await askDate(titulo, label, hojeISO());
+          if (data === null) return;
+          await App.MarcarBaixa(id, data);
+        }
         if (action === 'estornar') await App.Estornar(id);
+        if (action === 'conciliar') await App.Conciliar(id, '');
+        if (action === 'desconciliar') await App.DesfazerConciliacao(id);
         if (action === 'excluir') {
           if (await askConfirm('Excluir lançamento', 'Excluir este lançamento?', 'Excluir')) {
             await App.DeleteLancamento(id);
@@ -407,6 +429,10 @@
   }
 
   async function openModalLancamento(tipo, id = null) {
+    if (!id && state.contas.length === 0) {
+      toast('Cadastre uma conta / caixa antes de lançar.', true);
+      return;
+    }
     const selCategoria = document.getElementById('lanc-categoria');
     const selConta = document.getElementById('lanc-conta');
     selCategoria.innerHTML = state.categorias
@@ -417,6 +443,8 @@
     document.getElementById('lanc-tipo').value = tipo;
     document.getElementById('modal-titulo').textContent =
       (id ? 'Editar' : 'Nova') + (tipo === 'pagar' ? ' conta a pagar' : ' conta a receber');
+    document.getElementById('lanc-pagamento-label').textContent =
+      tipo === 'pagar' ? 'Data de pagamento' : 'Data de recebimento';
 
     if (id) {
       const itens = await App.ListLancamentos({ tipo, status: '', dataInicio: '', dataFim: '' });
@@ -427,6 +455,7 @@
       document.getElementById('lanc-conta').value = l.contaId || '';
       document.getElementById('lanc-valor').value = l.valor;
       document.getElementById('lanc-vencimento').value = l.dataVencimento;
+      document.getElementById('lanc-pagamento').value = l.dataPagamento || '';
       document.getElementById('lanc-obs').value = l.observacoes || '';
     } else {
       document.getElementById('form-lancamento').reset();
@@ -447,6 +476,7 @@
       contaId: Number(document.getElementById('lanc-conta').value) || null,
       valor: Number(document.getElementById('lanc-valor').value),
       dataVencimento: document.getElementById('lanc-vencimento').value,
+      dataPagamento: document.getElementById('lanc-pagamento').value,
       observacoes: document.getElementById('lanc-obs').value.trim()
     };
 
@@ -464,9 +494,126 @@
   function openModal(name) { document.getElementById(`modal-${name}`).classList.add('open'); }
   function closeModal(name) { document.getElementById(`modal-${name}`).classList.remove('open'); }
 
+  // ---------------------------------------------------------------
+  // Importação e conciliação de extrato OFX
+  // ---------------------------------------------------------------
+
+  let ofxPrevia = null;
+
+  function setupImportacaoOFX() {
+    document.querySelectorAll('[data-open-ofx]').forEach((btn) => {
+      btn.addEventListener('click', openModalOFX);
+    });
+    document.querySelectorAll('[data-close-modal="ofx"]').forEach((btn) => {
+      btn.addEventListener('click', () => closeModal('ofx'));
+    });
+    document.getElementById('ofx-escolher').addEventListener('click', escolherArquivoOFX);
+    document.getElementById('ofx-aplicar').addEventListener('click', aplicarOFX);
+  }
+
+  function openModalOFX() {
+    if (state.contas.length === 0) {
+      toast('Cadastre uma conta / caixa antes de importar.', true);
+      return;
+    }
+    ofxPrevia = null;
+    document.getElementById('ofx-conta').innerHTML =
+      state.contas.map((c) => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join('');
+    document.getElementById('ofx-step-1').hidden = false;
+    document.getElementById('ofx-step-2').hidden = true;
+    document.getElementById('ofx-linhas').innerHTML = '';
+    openModal('ofx');
+  }
+
+  async function escolherArquivoOFX() {
+    const contaId = Number(document.getElementById('ofx-conta').value);
+    let previa;
+    try {
+      previa = await App.ImportarExtratoOFX(contaId);
+    } catch (err) {
+      toast(String(err && err.message ? err.message : err), true);
+      return;
+    }
+    if (!previa || !previa.arquivo) return; // usuário cancelou o diálogo
+    ofxPrevia = previa;
+    renderPreviaOFX(previa);
+  }
+
+  function renderPreviaOFX(p) {
+    document.getElementById('ofx-step-1').hidden = true;
+    document.getElementById('ofx-step-2').hidden = false;
+    document.getElementById('ofx-resumo').textContent =
+      `${p.arquivo} — ${p.linhas.length} transação(ões)` + (p.periodo ? ` · período ${p.periodo}` : '');
+
+    const aviso = document.getElementById('ofx-aviso');
+    aviso.hidden = !p.aviso;
+    aviso.textContent = p.aviso || '';
+
+    const tbody = document.getElementById('ofx-linhas');
+    tbody.innerHTML = p.linhas.map((lc, i) => {
+      const l = lc.linha;
+      const mov = l.tipo === 'pagar'
+        ? '<span class="badge atrasado">Débito</span>'
+        : '<span class="badge recebido">Crédito</span>';
+      let acao;
+      if (lc.jaImportada) {
+        acao = '<span class="mini-sub">Já importada</span>';
+      } else {
+        const opts = (lc.candidatos || []).map((c) => {
+          const sel = lc.sugestao === 'conciliar' && lc.sugestaoId === c.id ? ' selected' : '';
+          return `<option value="conciliar:${c.id}"${sel}>Conciliar: ${escapeHtml(c.descricao)} · ${fmtDate(c.dataVencimento)} · ${fmtMoney(c.valor)}</option>`;
+        });
+        opts.push(`<option value="criar"${lc.sugestao === 'criar' ? ' selected' : ''}>Criar lançamento</option>`);
+        opts.push(`<option value="ignorar"${lc.sugestao === 'ignorar' ? ' selected' : ''}>Ignorar</option>`);
+        acao = `<select data-i="${i}">${opts.join('')}</select>`;
+      }
+      return `<tr class="${lc.jaImportada ? 'ofx-feita' : ''}">
+        <td>${fmtDate(l.data)}</td>
+        <td>${escapeHtml(l.descricao || '—')}</td>
+        <td>${mov}</td>
+        <td>${fmtMoney(l.valor)}</td>
+        <td>${acao}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  async function aplicarOFX() {
+    if (!ofxPrevia) return;
+    const decisoes = [];
+    document.querySelectorAll('#ofx-linhas select[data-i]').forEach((sel) => {
+      const lc = ofxPrevia.linhas[Number(sel.dataset.i)];
+      const [acao, id] = sel.value.split(':');
+      decisoes.push({
+        linha: lc.linha,
+        acao,
+        lancamentoId: acao === 'conciliar' ? Number(id) : null,
+        categoriaId: null,
+      });
+    });
+
+    let r;
+    try {
+      r = await App.AplicarImportacaoOFX(ofxPrevia.contaId, decisoes);
+    } catch (err) {
+      toast(String(err && err.message ? err.message : err), true);
+      return;
+    }
+
+    const temErro = r.erros && r.erros.length > 0;
+    toast(`Extrato: ${r.conciliados} conciliado(s), ${r.criados} criado(s), ${r.ignorados} ignorado(s)`
+      + (temErro ? ` · ${r.erros.length} erro(s)` : ''), temErro);
+
+    closeModal('ofx');
+    ofxPrevia = null;
+    await refreshCategoriasEContas();
+    loadLancamentos('pagar');
+    loadLancamentos('receber');
+    loadDashboard();
+  }
+
   // Diálogos em DOM — o WKWebView do macOS não implementa window.prompt/confirm,
   // então esses helpers os substituem devolvendo uma Promise.
-  function askDialog({ title, message = '', input = false, value = '', label = 'Valor', okText = 'Confirmar', danger = false }) {
+  function askDialog({ title, message = '', input = false, inputType = 'text', value = '', label = 'Valor', okText = 'Confirmar', danger = false }) {
     return new Promise((resolve) => {
       const backdrop = document.getElementById('modal-ask');
       const field = document.getElementById('ask-field');
@@ -480,6 +627,7 @@
       msgEl.style.display = message ? 'block' : 'none';
       document.getElementById('ask-label').textContent = label;
       field.style.display = input ? 'flex' : 'none';
+      inp.type = inputType;
       inp.value = value || '';
       okBtn.textContent = okText;
       okBtn.style.background = danger ? 'var(--red)' : '';
@@ -502,12 +650,21 @@
       cancelBtn.addEventListener('click', onCancel);
       document.addEventListener('keydown', onKey);
       backdrop.classList.add('open');
-      if (input) setTimeout(() => { inp.focus(); inp.select(); }, 30);
+      if (input) setTimeout(() => {
+        inp.focus();
+        if (inp.type === 'text') inp.select();
+      }, 30);
     });
   }
 
   const askText = (title, label, value) => askDialog({ title, label, value, input: true });
+  const askDate = (title, label, value) => askDialog({ title, label, value, input: true, inputType: 'date' });
   const askConfirm = (title, message, okText = 'Confirmar') => askDialog({ title, message, okText, danger: true });
+
+  function hojeISO() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
 
   // ---------------------------------------------------------------
   // Fluxo de caixa
@@ -637,8 +794,11 @@
       e.preventDefault();
       const nome = document.getElementById('conta-nome').value.trim();
       const saldoInicial = Number(document.getElementById('conta-saldo').value) || 0;
+      const bankId = document.getElementById('conta-bank-id').value.trim();
+      const acctId = document.getElementById('conta-acct-id').value.trim();
+      const acctType = document.getElementById('conta-acct-type').value;
       if (!nome) return;
-      await App.CreateConta(nome, saldoInicial);
+      await App.CreateConta(nome, saldoInicial, bankId, acctId, acctType);
       e.target.reset();
       await refreshCategoriasEContas();
       loadCadastros();
@@ -659,15 +819,22 @@
   async function loadCadastros() {
     await refreshCategoriasEContas();
 
+    const acctTypeLabel = { CHECKING: 'Corrente', SAVINGS: 'Poupança', CASH: 'Caixa' };
     const listaContas = document.getElementById('lista-contas');
-    listaContas.innerHTML = state.contas.map((c) => `
+    listaContas.innerHTML = state.contas.map((c) => {
+      const banco = [c.bankId, c.acctId].filter(Boolean).join(' / ');
+      const dados = [`Saldo inicial: ${fmtMoney(c.saldoInicial)}`];
+      if (banco) dados.push(`Banco ${escapeHtml(banco)}`);
+      if (c.acctType) dados.push(acctTypeLabel[c.acctType] || escapeHtml(c.acctType));
+      return `
       <div class="mini-row">
         <div class="mini-main">
           <span>${escapeHtml(c.nome)}</span>
-          <span class="mini-sub">Saldo inicial: ${fmtMoney(c.saldoInicial)}</span>
+          <span class="mini-sub">${dados.join(' · ')}</span>
         </div>
         <button class="mini-remove" data-remove-conta="${c.id}">✕</button>
-      </div>`).join('') || '<div class="empty-msg">Nenhuma conta cadastrada.</div>';
+      </div>`;
+    }).join('') || '<div class="empty-msg">Nenhuma conta cadastrada.</div>';
 
     const listaCategorias = document.getElementById('lista-categorias');
     listaCategorias.innerHTML = state.categorias.map((c) => `
@@ -681,7 +848,12 @@
 
     listaContas.querySelectorAll('[data-remove-conta]').forEach((btn) => {
       btn.addEventListener('click', async () => {
-        await App.DeleteConta(Number(btn.dataset.removeConta));
+        try {
+          await App.DeleteConta(Number(btn.dataset.removeConta));
+        } catch (err) {
+          toast(String(err && err.message ? err.message : err), true);
+          return;
+        }
         await refreshCategoriasEContas();
         loadCadastros();
       });
@@ -901,6 +1073,7 @@
     setupExport();
     setupUpdate();
     setupEmpresas();
+    setupImportacaoOFX();
     mostrarVersao();
     await carregarEmpresas();
     await refreshCategoriasEContas();

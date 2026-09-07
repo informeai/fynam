@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"fynam/internal/model"
+	"fynam/internal/ofx"
 	"fynam/internal/storage/sqlite"
 )
 
@@ -25,6 +26,17 @@ func appDeTeste(t *testing.T) *App {
 	// testes começarem do zero.
 	limparEmpresaAtiva(t, st)
 	return NewApp(st)
+}
+
+// contaDeTeste cria uma conta na empresa ativa e devolve seu id, para os
+// testes que precisam lançar (ContaID é obrigatório).
+func contaDeTeste(t *testing.T, a *App) int {
+	t.Helper()
+	c, err := a.CreateConta("Caixa", 0, "", "", "")
+	if err != nil {
+		t.Fatalf("CreateConta: %v", err)
+	}
+	return c.ID
 }
 
 func limparEmpresaAtiva(t *testing.T, st *sqlite.Store) {
@@ -49,7 +61,8 @@ func TestDashboardEDRE(t *testing.T) {
 	a := appDeTeste(t)
 	_ = context.Background()
 
-	if _, err := a.CreateConta("Caixa", 1000); err != nil {
+	caixa, err := a.CreateConta("Caixa", 1000, "", "", "")
+	if err != nil {
 		t.Fatal(err)
 	}
 	receita, _ := a.CreateCategoria("Vendas", "receita")
@@ -57,7 +70,7 @@ func TestDashboardEDRE(t *testing.T) {
 
 	// uma entrada já recebida e uma saída em aberto, no mesmo mês
 	entrada, err := a.CreateLancamento(model.LancamentoInput{
-		Tipo: "receber", Descricao: "Venda", CategoriaID: &receita.ID,
+		Tipo: "receber", Descricao: "Venda", CategoriaID: &receita.ID, ContaID: &caixa.ID,
 		Valor: 500, DataVencimento: "2026-05-10",
 	})
 	if err != nil {
@@ -67,7 +80,7 @@ func TestDashboardEDRE(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := a.CreateLancamento(model.LancamentoInput{
-		Tipo: "pagar", Descricao: "Aluguel maio", CategoriaID: &despesa.ID,
+		Tipo: "pagar", Descricao: "Aluguel maio", CategoriaID: &despesa.ID, ContaID: &caixa.ID,
 		Valor: 200, DataVencimento: "2026-05-20",
 	}); err != nil {
 		t.Fatal(err)
@@ -115,16 +128,17 @@ func TestDashboardEDRE(t *testing.T) {
 
 func TestFiltroPorStatusDerivado(t *testing.T) {
 	a := appDeTeste(t)
+	conta := contaDeTeste(t, a)
 
 	// vencido e não pago => status "atrasado"
 	if _, err := a.CreateLancamento(model.LancamentoInput{
-		Tipo: "pagar", Descricao: "Conta velha", Valor: 50, DataVencimento: "2000-01-01",
+		Tipo: "pagar", Descricao: "Conta velha", ContaID: &conta, Valor: 50, DataVencimento: "2000-01-01",
 	}); err != nil {
 		t.Fatal(err)
 	}
 	// futuro => "pendente"
 	if _, err := a.CreateLancamento(model.LancamentoInput{
-		Tipo: "pagar", Descricao: "Conta futura", Valor: 70, DataVencimento: "2099-01-01",
+		Tipo: "pagar", Descricao: "Conta futura", ContaID: &conta, Valor: 70, DataVencimento: "2099-01-01",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -138,11 +152,238 @@ func TestFiltroPorStatusDerivado(t *testing.T) {
 	}
 }
 
+func TestConciliar(t *testing.T) {
+	a := appDeTeste(t)
+	conta := contaDeTeste(t, a)
+
+	l, err := a.CreateLancamento(model.LancamentoInput{
+		Tipo: "pagar", Descricao: "Fornecedor X", ContaID: &conta, Valor: 120, DataVencimento: "2026-06-01",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// ContaID é obrigatório
+	if _, err := a.CreateLancamento(model.LancamentoInput{
+		Tipo: "pagar", Descricao: "Sem conta", Valor: 10, DataVencimento: "2026-06-01",
+	}); err == nil {
+		t.Fatal("CreateLancamento devia recusar lançamento sem conta")
+	}
+
+	// não dá pra conciliar antes da baixa
+	if _, err := a.Conciliar(l.ID, ""); err == nil {
+		t.Fatal("Conciliar devia recusar lançamento ainda não pago")
+	}
+
+	if _, err := a.MarcarBaixa(l.ID, "2026-06-02"); err != nil {
+		t.Fatal(err)
+	}
+	conc, err := a.Conciliar(l.ID, "2026-06-03")
+	if err != nil {
+		t.Fatalf("Conciliar: %v", err)
+	}
+	if conc.Status != "conciliado" || conc.DataConciliacao != "2026-06-03" {
+		t.Fatalf("após conciliar: status=%q dataConciliacao=%q", conc.Status, conc.DataConciliacao)
+	}
+
+	// filtro por status derivado "conciliado"
+	conciliados, err := a.ListLancamentos(model.LancamentoFiltro{Tipo: "pagar", Status: "conciliado"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(conciliados) != 1 || conciliados[0].ID != l.ID {
+		t.Fatalf("filtro status=conciliado: %+v", conciliados)
+	}
+
+	// não conta como "a pagar" no dashboard
+	resumo, err := a.DashboardResumo()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resumo.TotalAPagar != 0 {
+		t.Errorf("TotalAPagar = %v, esperado 0 (lançamento conciliado)", resumo.TotalAPagar)
+	}
+
+	// desfazer conciliação volta para "pago"
+	volta, err := a.DesfazerConciliacao(l.ID)
+	if err != nil {
+		t.Fatalf("DesfazerConciliacao: %v", err)
+	}
+	if volta.Status != "pago" || volta.DataConciliacao != "" {
+		t.Fatalf("após desfazer: status=%q dataConciliacao=%q", volta.Status, volta.DataConciliacao)
+	}
+
+	// estornar a baixa de um lançamento conciliado limpa tudo
+	if _, err := a.Conciliar(l.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	est, err := a.Estornar(l.ID)
+	if err != nil {
+		t.Fatalf("Estornar: %v", err)
+	}
+	if est.DataPagamento != "" || est.DataConciliacao != "" {
+		t.Fatalf("estorno devia limpar pagamento e conciliação: %+v", est)
+	}
+}
+
+func TestDataPagamentoPeloFormulario(t *testing.T) {
+	a := appDeTeste(t)
+	conta := contaDeTeste(t, a)
+
+	base := func(dataPagamento string) model.LancamentoInput {
+		return model.LancamentoInput{
+			Tipo: "receber", Descricao: "Adiantamento", ContaID: &conta,
+			Valor: 200, DataVencimento: "2026-07-31", DataPagamento: dataPagamento,
+		}
+	}
+
+	// criar já recebido, numa data diferente do vencimento
+	l, err := a.CreateLancamento(base("2026-07-10"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l.DataPagamento != "2026-07-10" || l.Status != "recebido" {
+		t.Fatalf("criar com dataPagamento: %+v", l)
+	}
+
+	// editar mudando só a data de recebimento
+	up, err := a.UpdateLancamento(l.ID, base("2026-07-12"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if up.DataPagamento != "2026-07-12" || up.Status != "recebido" {
+		t.Fatalf("editar dataPagamento: %+v", up)
+	}
+
+	// limpar a data pelo formulário reabre o lançamento e desfaz a conciliação
+	if _, err := a.Conciliar(l.ID, "2026-07-13"); err != nil {
+		t.Fatal(err)
+	}
+	limpo, err := a.UpdateLancamento(l.ID, base(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if limpo.DataPagamento != "" || limpo.DataConciliacao != "" || limpo.Status == "conciliado" {
+		t.Fatalf("limpar dataPagamento devia reabrir e desconciliar: %+v", limpo)
+	}
+}
+
+func TestImportacaoOFX(t *testing.T) {
+	a := appDeTeste(t)
+	conta := contaDeTeste(t, a)
+
+	// um lançamento a pagar que deve casar com um débito do extrato
+	aluguel, err := a.CreateLancamento(model.LancamentoInput{
+		Tipo: "pagar", Descricao: "Aluguel", ContaID: &conta,
+		Valor: 2400, DataVencimento: "2026-09-08",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ext := ofx.Extrato{
+		Conta:      ofx.Conta{BankID: "341", AcctID: "111"},
+		DataInicio: "2026-09-01", DataFim: "2026-09-30",
+		Transacoes: []ofx.Transacao{
+			{FITID: "A1", Data: "2026-09-09", Valor: 2400, Tipo: "pagar", Descricao: "ALUGUEL IMOB"},
+			{FITID: "B2", Data: "2026-09-12", Valor: 1500, Tipo: "receber", Descricao: "CLIENTE XPTO"},
+		},
+	}
+
+	daConta, err := a.lancamentosDaConta(conta)
+	if err != nil {
+		t.Fatal(err)
+	}
+	previa := montarPreviaOFX(ext, model.Conta{}, daConta, map[string]model.ExtratoRegistro{})
+
+	if !previa.SemConflito || previa.Periodo == "" {
+		t.Fatalf("prévia: semConflito=%v periodo=%q", previa.SemConflito, previa.Periodo)
+	}
+	if len(previa.Linhas) != 2 {
+		t.Fatalf("prévia devia ter 2 linhas, tem %d", len(previa.Linhas))
+	}
+	l0 := previa.Linhas[0]
+	if l0.Sugestao != "conciliar" || l0.SugestaoID == nil || *l0.SugestaoID != aluguel.ID {
+		t.Fatalf("linha 0 devia sugerir conciliar com %d: %+v", aluguel.ID, l0)
+	}
+	if previa.Linhas[1].Sugestao != "criar" {
+		t.Fatalf("linha 1 (sem candidato) devia sugerir criar: %+v", previa.Linhas[1])
+	}
+
+	// aplica: concilia a primeira, cria a segunda
+	r, err := a.AplicarImportacaoOFX(conta, []DecisaoConciliacao{
+		{Linha: previa.Linhas[0].Linha, Acao: "conciliar", LancamentoID: l0.SugestaoID},
+		{Linha: previa.Linhas[1].Linha, Acao: "criar"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Conciliados != 1 || r.Criados != 1 || len(r.Erros) != 0 {
+		t.Fatalf("resumo = %+v", r)
+	}
+
+	// o aluguel ficou conciliado com a data do extrato
+	pagos, _ := a.ListLancamentos(model.LancamentoFiltro{Tipo: "pagar", Status: "conciliado"})
+	if len(pagos) != 1 || pagos[0].ID != aluguel.ID ||
+		pagos[0].DataPagamento != "2026-09-09" || pagos[0].DataConciliacao != "2026-09-09" {
+		t.Fatalf("aluguel após conciliar: %+v", pagos)
+	}
+
+	// a segunda linha virou um lançamento a receber já conciliado
+	recebidos, _ := a.ListLancamentos(model.LancamentoFiltro{Tipo: "receber", Status: "conciliado"})
+	if len(recebidos) != 1 || recebidos[0].Valor != 1500 || recebidos[0].Descricao != "CLIENTE XPTO" {
+		t.Fatalf("lançamento criado do extrato: %+v", recebidos)
+	}
+
+	// reimportar o mesmo extrato: ambas as linhas agora são "já importadas"
+	daConta2, _ := a.lancamentosDaConta(conta)
+	regs, err := a.store.ExtratoRegistrosPorFitid(a.c(), conta)
+	if err != nil {
+		t.Fatal(err)
+	}
+	previa2 := montarPreviaOFX(ext, model.Conta{}, daConta2, regs)
+	for i, l := range previa2.Linhas {
+		if !l.JaImportada || l.Sugestao != "ignorar" {
+			t.Fatalf("reimport linha %d devia ser já importada/ignorar: %+v", i, l)
+		}
+	}
+
+	// desconciliar o aluguel manualmente: a linha do extrato volta a ser
+	// oferecida para reconciliação e a reimportação aplica de novo
+	if _, err := a.DesfazerConciliacao(aluguel.ID); err != nil {
+		t.Fatal(err)
+	}
+	daConta3, _ := a.lancamentosDaConta(conta)
+	regs, _ = a.store.ExtratoRegistrosPorFitid(a.c(), conta)
+	previa3 := montarPreviaOFX(ext, model.Conta{}, daConta3, regs)
+
+	linhaAluguel := previa3.Linhas[0]
+	if linhaAluguel.JaImportada || linhaAluguel.Sugestao != "conciliar" ||
+		linhaAluguel.SugestaoID == nil || *linhaAluguel.SugestaoID != aluguel.ID {
+		t.Fatalf("após desconciliar, a linha devia reabrir p/ conciliar com %d: %+v", aluguel.ID, linhaAluguel)
+	}
+	// a linha criada (B2) continua "já importada"
+	if !previa3.Linhas[1].JaImportada {
+		t.Fatalf("linha criada não deveria reabrir: %+v", previa3.Linhas[1])
+	}
+
+	r2, err := a.AplicarImportacaoOFX(conta, []DecisaoConciliacao{
+		{Linha: linhaAluguel.Linha, Acao: "conciliar", LancamentoID: linhaAluguel.SugestaoID},
+	})
+	if err != nil || r2.Conciliados != 1 {
+		t.Fatalf("reaplicar conciliação: r=%+v err=%v", r2, err)
+	}
+	pagos2, _ := a.ListLancamentos(model.LancamentoFiltro{Tipo: "pagar", Status: "conciliado"})
+	if len(pagos2) != 1 || pagos2[0].ID != aluguel.ID {
+		t.Fatalf("aluguel devia estar conciliado de novo: %+v", pagos2)
+	}
+}
+
 func TestMultiplasEmpresas(t *testing.T) {
 	a := appDeTeste(t)
 
 	// dado na Empresa Principal
-	if _, err := a.CreateConta("Caixa Principal", 100); err != nil {
+	if _, err := a.CreateConta("Caixa Principal", 100, "", "", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -166,7 +407,8 @@ func TestMultiplasEmpresas(t *testing.T) {
 
 	// dado da Empresa Principal não vaza para a Filial
 	if _, err := a.CreateLancamento(model.LancamentoInput{
-		Tipo: "pagar", Descricao: "Só da filial", Valor: 10, DataVencimento: "2026-06-01",
+		Tipo: "pagar", Descricao: "Só da filial", ContaID: &contas[0].ID,
+		Valor: 10, DataVencimento: "2026-06-01",
 	}); err != nil {
 		t.Fatal(err)
 	}

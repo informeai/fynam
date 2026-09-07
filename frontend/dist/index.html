@@ -105,6 +105,7 @@
           <h1>Contas a Pagar</h1>
           <div class="header-actions">
             <div class="dd export" data-export="pagar"></div>
+            <button class="btn btn-secondary" data-open-ofx>Importar extrato (OFX)</button>
             <button class="btn btn-primary" data-open-modal="lancamento" data-tipo="pagar">+ Nova conta a pagar</button>
           </div>
         </header>
@@ -114,7 +115,7 @@
             <thead>
               <tr>
                 <th>Descrição</th><th>Categoria</th><th>Vencimento</th>
-                <th>Valor</th><th>Status</th><th></th>
+                <th>Pagamento</th><th>Valor</th><th>Status</th><th></th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -128,6 +129,7 @@
           <h1>Contas a Receber</h1>
           <div class="header-actions">
             <div class="dd export" data-export="receber"></div>
+            <button class="btn btn-secondary" data-open-ofx>Importar extrato (OFX)</button>
             <button class="btn btn-primary" data-open-modal="lancamento" data-tipo="receber">+ Nova conta a receber</button>
           </div>
         </header>
@@ -137,7 +139,7 @@
             <thead>
               <tr>
                 <th>Descrição</th><th>Categoria</th><th>Vencimento</th>
-                <th>Valor</th><th>Status</th><th></th>
+                <th>Recebimento</th><th>Valor</th><th>Status</th><th></th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -244,6 +246,14 @@
             <form id="form-conta" class="inline-form">
               <input type="text" id="conta-nome" placeholder="Nome da conta" required />
               <input type="number" id="conta-saldo" placeholder="Saldo inicial" step="0.01" />
+              <input type="text" id="conta-bank-id" placeholder="Cód. banco (opcional)" />
+              <input type="text" id="conta-acct-id" placeholder="Nº da conta (opcional)" />
+              <select id="conta-acct-type" title="Tipo da conta (para conciliação por extrato)">
+                <option value="">Tipo…</option>
+                <option value="CHECKING">Corrente</option>
+                <option value="SAVINGS">Poupança</option>
+                <option value="CASH">Caixa</option>
+              </select>
               <button class="btn btn-secondary" type="submit">Adicionar</button>
             </form>
             <div id="lista-contas" class="mini-list"></div>
@@ -281,13 +291,17 @@
         <select id="lanc-categoria"></select>
 
         <label>Conta / Caixa</label>
-        <select id="lanc-conta"></select>
+        <select id="lanc-conta" required></select>
 
         <label>Valor (R$)</label>
         <input type="number" id="lanc-valor" step="0.01" min="0" required />
 
         <label>Vencimento</label>
         <input type="date" id="lanc-vencimento" required />
+
+        <label id="lanc-pagamento-label">Data de pagamento</label>
+        <input type="date" id="lanc-pagamento" />
+        <small class="field-hint">Deixe em branco enquanto não for pago / recebido.</small>
 
         <label>Observações</label>
         <textarea id="lanc-obs" rows="2"></textarea>
@@ -313,6 +327,40 @@
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" id="ask-cancel">Cancelar</button>
         <button type="button" class="btn btn-primary" id="ask-ok">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL: importar extrato OFX ===================== -->
+  <div class="modal-backdrop" id="modal-ofx">
+    <div class="modal modal-lg">
+      <h2>Importar extrato (OFX)</h2>
+
+      <div id="ofx-step-1">
+        <label for="ofx-conta">Conta / Caixa</label>
+        <select id="ofx-conta"></select>
+        <small class="field-hint">Débitos do extrato conciliam contas a pagar; créditos, contas a receber.</small>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal="ofx">Cancelar</button>
+          <button type="button" class="btn btn-primary" id="ofx-escolher">Escolher arquivo…</button>
+        </div>
+      </div>
+
+      <div id="ofx-step-2" hidden>
+        <p id="ofx-resumo" class="subtitle" style="margin: 4px 0 8px;"></p>
+        <p id="ofx-aviso" class="ofx-aviso" hidden></p>
+        <div class="table-wrap ofx-preview">
+          <table class="table">
+            <thead>
+              <tr><th>Data</th><th>Descrição</th><th>Mov.</th><th>Valor</th><th>Ação</th></tr>
+            </thead>
+            <tbody id="ofx-linhas"></tbody>
+          </table>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal="ofx">Cancelar</button>
+          <button type="button" class="btn btn-primary" id="ofx-aplicar">Aplicar</button>
+        </div>
       </div>
     </div>
   </div>

@@ -11,6 +11,7 @@
 //     entidade já com o id atribuído pelo repositório.
 //   - Operação sobre id inexistente devolve ErrNaoEncontrado.
 //   - Nenhuma implementação deve persistir Lancamento.Status (é derivado).
+//     DataPagamento e DataConciliacao, sim, são fatos e devem ser gravados.
 //   - ListLancamentos aplica apenas os filtros "estruturais" (Tipo,
 //     DataInicio, DataFim). O filtro por Status é responsabilidade da
 //     camada de aplicação, pois Status é calculado.
@@ -30,6 +31,11 @@ import (
 
 // ErrNaoEncontrado é devolvido quando um id informado não existe.
 var ErrNaoEncontrado = errors.New("registro não encontrado")
+
+// ErrContaEmUso é devolvido por DeleteConta quando a conta ainda tem
+// lançamentos vinculados (a exclusão é bloqueada em vez de anular a
+// referência, para não órfã histórico já conciliado).
+var ErrContaEmUso = errors.New("conta possui lançamentos vinculados e não pode ser excluída")
 
 // Store é o contrato de persistência. Toda implementação precisa ser
 // segura para uso concorrente (o Wails chama métodos em goroutines).
@@ -61,6 +67,8 @@ type Store interface {
 	GetConta(ctx context.Context, id int) (model.Conta, error)
 	CreateConta(ctx context.Context, empresaID int, c model.Conta) (model.Conta, error)
 	UpdateConta(ctx context.Context, c model.Conta) (model.Conta, error)
+	// DeleteConta remove a conta. Devolve ErrContaEmUso se ainda houver
+	// lançamentos vinculados a ela.
 	DeleteConta(ctx context.Context, id int) error
 
 	// ----- Categorias (escopo: empresa) -----
@@ -76,6 +84,23 @@ type Store interface {
 	DeleteLancamento(ctx context.Context, id int) error
 
 	// SetPagamento marca (data != "") ou desfaz (data == "") a baixa de um
-	// lançamento, de forma atômica.
+	// lançamento, de forma atômica. Desfazer a baixa também limpa a
+	// conciliação (não pode haver lançamento conciliado sem pagamento).
 	SetPagamento(ctx context.Context, id int, dataPagamento string) (model.Lancamento, error)
+
+	// SetConciliacao marca (data != "") ou desfaz (data == "") a conciliação
+	// de um lançamento, de forma atômica.
+	SetConciliacao(ctx context.Context, id int, dataConciliacao string) (model.Lancamento, error)
+
+	// ----- Extrato OFX (linhas já importadas; escopo: conta) -----
+
+	// ExtratoRegistrosPorFitid devolve, por FITID já importado na conta, o
+	// que foi feito com a linha e o lançamento vinculado — para deduplicar
+	// (e reabrir) novas importações.
+	ExtratoRegistrosPorFitid(ctx context.Context, contaID int) (map[string]model.ExtratoRegistro, error)
+
+	// RegistrarExtratoLinha grava a linha de extrato importada, de forma
+	// idempotente por (conta, FITID). status é "conciliado", "criado" ou
+	// "ignorado"; lancamentoID é nulo quando ignorada.
+	RegistrarExtratoLinha(ctx context.Context, contaID int, l model.ExtratoLinha, status string, lancamentoID *int) error
 }

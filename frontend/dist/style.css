@@ -13,6 +13,8 @@
   --red-bg: #fef2f2;
   --amber: #d97706;
   --amber-bg: #fffbeb;
+  --blue: #2563eb;
+  --blue-bg: #eff6ff;
   --card-bg: #ffffff;
   --border: #e2e8f0;
   --text: #0f172a;
@@ -385,6 +387,7 @@ html, body {
 .badge.pendente { background: var(--amber-bg); color: var(--amber); }
 .badge.atrasado { background: var(--red-bg); color: var(--red); }
 .badge.pago, .badge.recebido { background: var(--green-bg); color: var(--green); }
+.badge.conciliado { background: var(--blue-bg); color: var(--blue); }
 
 .row-actions { display: flex; gap: 6px; justify-content: flex-end; }
 
@@ -526,6 +529,42 @@ html, body {
   font-size: 13.5px;
   font-family: inherit;
 }
+
+.modal .field-hint {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.modal.modal-lg {
+  width: min(760px, 94vw);
+}
+
+.ofx-preview {
+  max-height: 46vh;
+  overflow: auto;
+  margin: 8px 0;
+}
+
+.ofx-preview .table th,
+.ofx-preview .table td {
+  font-size: 12.5px;
+}
+
+.ofx-preview select {
+  max-width: 320px;
+}
+
+.ofx-aviso {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: var(--amber-bg);
+  color: var(--amber);
+  font-size: 12.5px;
+}
+
+tr.ofx-feita { opacity: 0.5; }
 
 .modal-actions {
   display: flex;
