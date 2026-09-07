@@ -249,11 +249,11 @@ export namespace model {
 	    dataVencimento: string;
 	    dataPagamento: string;
 	    observacoes: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new LancamentoInput(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.tipo = source["tipo"];
