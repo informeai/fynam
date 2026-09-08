@@ -5,13 +5,19 @@
 (() => {
   const App = window.go.main.App;
 
+  function filtroVazio() {
+    return {
+      status: 'todos', busca: '', categoriaId: '', contaId: '',
+      vencDe: '', vencAte: '', valorMin: '', valorMax: ''
+    };
+  }
+
   const state = {
     categorias: [],
     contas: [],
     empresas: [],
     empresaAtivaId: null,
-    filtroPagar: 'todos',
-    filtroReceber: 'todos'
+    filtros: { pagar: filtroVazio(), receber: filtroVazio() }
   };
 
   let ddEmpresa = null;
@@ -337,20 +343,91 @@
         btn.addEventListener('click', () => {
           wrap.querySelectorAll('.filter-btn').forEach((b) => b.classList.remove('active'));
           btn.classList.add('active');
-          if (tipo === 'pagar') state.filtroPagar = valor; else state.filtroReceber = valor;
+          state.filtros[tipo].status = valor;
           loadLancamentos(tipo);
         });
         wrap.appendChild(btn);
       });
+      montarCamposFiltro(tipo);
     });
   }
 
-  async function loadLancamentos(tipo) {
-    const filtroStatus = tipo === 'pagar' ? state.filtroPagar : state.filtroReceber;
-    const filtros = { tipo, status: '', dataInicio: '', dataFim: '' };
-    if (filtroStatus !== 'todos') filtros.status = filtroStatus;
+  function debounce(fn, ms) {
+    let t = null;
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  }
 
-    const itens = await App.ListLancamentos(filtros);
+  // montarCamposFiltro (re)desenha a linha de filtros por campo de uma das
+  // telas, preservando o que já estava selecionado em state.filtros[tipo].
+  function montarCamposFiltro(tipo) {
+    const wrap = document.querySelector(`.filter-fields[data-filter-fields="${tipo}"]`);
+    if (!wrap) return;
+    const f = state.filtros[tipo];
+    const catTipo = tipo === 'pagar' ? 'despesa' : 'receita';
+    const cats = state.categorias.filter((c) => c.tipo === catTipo);
+
+    wrap.innerHTML = `
+      <input type="search" class="ff-busca" placeholder="Buscar descrição…" data-ff="busca" />
+      <select data-ff="categoriaId">
+        <option value="">Categoria: todas</option>
+        ${cats.map((c) => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join('')}
+      </select>
+      <select data-ff="contaId">
+        <option value="">Conta: todas</option>
+        ${state.contas.map((c) => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join('')}
+      </select>
+      <span class="ff-label">Venc.</span>
+      <input type="date" data-ff="vencDe" title="Vencimento de" />
+      <span class="ff-sep">–</span>
+      <input type="date" data-ff="vencAte" title="Vencimento até" />
+      <span class="ff-label">Valor</span>
+      <input type="number" class="ff-num" step="0.01" min="0" placeholder="mín" data-ff="valorMin" />
+      <span class="ff-sep">–</span>
+      <input type="number" class="ff-num" step="0.01" min="0" placeholder="máx" data-ff="valorMax" />
+      <button type="button" class="ff-limpar" data-ff-clear hidden>Limpar</button>`;
+
+    wrap.querySelectorAll('[data-ff]').forEach((el) => { el.value = f[el.dataset.ff]; });
+
+    const aplicar = debounce(() => loadLancamentos(tipo), 300);
+    const atualizarLimpar = () => {
+      const algum = Object.keys(f).some((k) => k !== 'status' && f[k] !== '');
+      wrap.querySelector('[data-ff-clear]').hidden = !algum;
+    };
+    atualizarLimpar();
+
+    wrap.querySelectorAll('[data-ff]').forEach((el) => {
+      const evento = (el.tagName === 'SELECT' || el.type === 'date') ? 'change' : 'input';
+      el.addEventListener(evento, () => {
+        f[el.dataset.ff] = el.value;
+        atualizarLimpar();
+        aplicar();
+      });
+    });
+    wrap.querySelector('[data-ff-clear]').addEventListener('click', () => {
+      Object.assign(f, filtroVazio());
+      f.status = state.filtros[tipo].status; // status é dos chips, não daqui
+      montarCamposFiltro(tipo);
+      loadLancamentos(tipo);
+    });
+  }
+
+  function filtroPayload(tipo) {
+    const f = state.filtros[tipo];
+    return {
+      tipo,
+      status: f.status === 'todos' ? '' : f.status,
+      dataInicio: f.vencDe || '',
+      dataFim: f.vencAte || '',
+      busca: f.busca.trim(),
+      categoriaId: f.categoriaId ? Number(f.categoriaId) : null,
+      contaId: f.contaId ? Number(f.contaId) : null,
+      valorMin: f.valorMin !== '' ? Number(f.valorMin) : null,
+      valorMax: f.valorMax !== '' ? Number(f.valorMax) : null
+    };
+  }
+
+  async function loadLancamentos(tipo) {
+    const itens = await App.ListLancamentos(filtroPayload(tipo));
     const tbody = document.querySelector(`#table-${tipo} tbody`);
     tbody.innerHTML = '';
 
@@ -870,6 +947,9 @@
   async function refreshCategoriasEContas() {
     state.categorias = await App.ListCategorias();
     state.contas = await App.ListContas();
+    // recarrega as opções de categoria/conta nos filtros das duas telas
+    montarCamposFiltro('pagar');
+    montarCamposFiltro('receber');
   }
 
   // ---------------------------------------------------------------
@@ -925,11 +1005,7 @@
           fmt
         );
       } else if (alvo === 'pagar' || alvo === 'receber') {
-        const filtroStatus = alvo === 'pagar' ? state.filtroPagar : state.filtroReceber;
-        caminho = await App.ExportarLancamentos(
-          { tipo: alvo, status: filtroStatus === 'todos' ? '' : filtroStatus, dataInicio: '', dataFim: '' },
-          fmt
-        );
+        caminho = await App.ExportarLancamentos(filtroPayload(alvo), fmt);
       }
       if (caminho) toast('Relatório salvo em ' + caminho);
     } catch (err) {

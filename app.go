@@ -6,6 +6,7 @@ import (
 	"log"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -158,12 +159,38 @@ func (a *App) ListLancamentos(filtro model.LancamentoFiltro) ([]model.Lancamento
 	out := make([]model.Lancamento, 0, len(itens))
 	for _, l := range itens {
 		l = l.ComStatus()
-		if filtro.Status != "" && l.Status != filtro.Status {
-			continue
+		if lancamentoPassaFiltro(l, filtro) {
+			out = append(out, l)
 		}
-		out = append(out, l)
 	}
 	return out, nil
+}
+
+// lancamentoPassaFiltro aplica os filtros que não são resolvidos pelo
+// Store: status derivado, busca textual, categoria, conta e faixa de valor.
+func lancamentoPassaFiltro(l model.Lancamento, f model.LancamentoFiltro) bool {
+	if f.Status != "" && l.Status != f.Status {
+		return false
+	}
+	if f.CategoriaID != nil && (l.CategoriaID == nil || *l.CategoriaID != *f.CategoriaID) {
+		return false
+	}
+	if f.ContaID != nil && (l.ContaID == nil || *l.ContaID != *f.ContaID) {
+		return false
+	}
+	if f.ValorMin != nil && l.Valor < *f.ValorMin {
+		return false
+	}
+	if f.ValorMax != nil && l.Valor > *f.ValorMax {
+		return false
+	}
+	if busca := strings.TrimSpace(f.Busca); busca != "" {
+		alvo := strings.ToLower(l.Descricao + " " + l.Observacoes)
+		if !strings.Contains(alvo, strings.ToLower(busca)) {
+			return false
+		}
+	}
+	return true
 }
 
 // validarLancamentoInput garante as regras que independem do backend de

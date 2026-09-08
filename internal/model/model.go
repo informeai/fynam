@@ -80,16 +80,23 @@ type LancamentoInput struct {
 	Observacoes    string  `json:"observacoes"`
 }
 
-// LancamentoFiltro são filtros opcionais da listagem. Campo vazio = ignorado.
+// LancamentoFiltro são filtros opcionais da listagem. Campo vazio / ponteiro
+// nil = ignorado.
 //
-// Tipo, DataInicio e DataFim são resolvidos pela camada de armazenamento
-// (viram WHERE no SQL, query nativa no Mongo, etc.). Status é derivado e,
-// por isso, aplicado depois, na camada de aplicação.
+// Tipo, DataInicio e DataFim (por data de vencimento) são resolvidos pela
+// camada de armazenamento (viram WHERE no SQL, query nativa no Mongo, etc.).
+// Status é derivado e os demais campos (Busca, CategoriaID, ContaID,
+// ValorMin, ValorMax) são aplicados depois, na camada de aplicação.
 type LancamentoFiltro struct {
-	Tipo       string `json:"tipo"`
-	Status     string `json:"status"`
-	DataInicio string `json:"dataInicio"`
-	DataFim    string `json:"dataFim"`
+	Tipo        string   `json:"tipo"`
+	Status      string   `json:"status"`
+	DataInicio  string   `json:"dataInicio"`
+	DataFim     string   `json:"dataFim"`
+	Busca       string   `json:"busca"`       // texto em descrição/observações (case-insensitive)
+	CategoriaID *int     `json:"categoriaId"` // nil = qualquer categoria
+	ContaID     *int     `json:"contaId"`     // nil = qualquer conta
+	ValorMin    *float64 `json:"valorMin"`    // nil = sem mínimo
+	ValorMax    *float64 `json:"valorMax"`    // nil = sem máximo
 }
 
 // Liquidado indica que o lançamento já saiu do "em aberto" (foi baixado).

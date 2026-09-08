@@ -152,6 +152,87 @@ func TestFiltroPorStatusDerivado(t *testing.T) {
 	}
 }
 
+func TestFiltrosPorCampos(t *testing.T) {
+	a := appDeTeste(t)
+	caixa := contaDeTeste(t, a)
+	banco, err := a.CreateConta("Banco", 0, "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	aluguel, _ := a.CreateCategoria("Aluguel", "despesa")
+	energia, _ := a.CreateCategoria("Energia", "despesa")
+
+	novo := func(desc string, catID *int, contaID int, valor float64, venc string) {
+		t.Helper()
+		if _, err := a.CreateLancamento(model.LancamentoInput{
+			Tipo: "pagar", Descricao: desc, CategoriaID: catID, ContaID: &contaID,
+			Valor: valor, DataVencimento: venc,
+		}); err != nil {
+			t.Fatalf("CreateLancamento %q: %v", desc, err)
+		}
+	}
+	novo("Aluguel loja centro", &aluguel.ID, caixa, 2500, "2026-03-10")
+	novo("Aluguel galpão", &aluguel.ID, banco.ID, 4000, "2026-03-15")
+	novo("Conta de luz CEMIG", &energia.ID, caixa, 320, "2026-04-05")
+	novo("Internet fibra", nil, caixa, 150, "2026-04-20")
+
+	casos := []struct {
+		nome   string
+		filtro model.LancamentoFiltro
+		quer   []string
+	}{
+		{"busca", model.LancamentoFiltro{Tipo: "pagar", Busca: "aluguel"},
+			[]string{"Aluguel loja centro", "Aluguel galpão"}},
+		{"busca case-insensitive", model.LancamentoFiltro{Tipo: "pagar", Busca: "CEMIG"},
+			[]string{"Conta de luz CEMIG"}},
+		{"categoria", model.LancamentoFiltro{Tipo: "pagar", CategoriaID: &energia.ID},
+			[]string{"Conta de luz CEMIG"}},
+		{"conta", model.LancamentoFiltro{Tipo: "pagar", ContaID: &banco.ID},
+			[]string{"Aluguel galpão"}},
+		{"valor min", model.LancamentoFiltro{Tipo: "pagar", ValorMin: f64(1000)},
+			[]string{"Aluguel loja centro", "Aluguel galpão"}},
+		{"faixa de valor", model.LancamentoFiltro{Tipo: "pagar", ValorMin: f64(100), ValorMax: f64(400)},
+			[]string{"Conta de luz CEMIG", "Internet fibra"}},
+		{"vencimento", model.LancamentoFiltro{Tipo: "pagar", DataInicio: "2026-04-01", DataFim: "2026-04-30"},
+			[]string{"Conta de luz CEMIG", "Internet fibra"}},
+		{"combinado", model.LancamentoFiltro{Tipo: "pagar", CategoriaID: &aluguel.ID, ContaID: &caixa, ValorMax: f64(3000)},
+			[]string{"Aluguel loja centro"}},
+	}
+
+	for _, c := range casos {
+		got, err := a.ListLancamentos(c.filtro)
+		if err != nil {
+			t.Fatalf("%s: %v", c.nome, err)
+		}
+		nomes := make([]string, len(got))
+		for i, l := range got {
+			nomes[i] = l.Descricao
+		}
+		if !mesmoConjunto(nomes, c.quer) {
+			t.Errorf("%s: got %v, quer %v", c.nome, nomes, c.quer)
+		}
+	}
+}
+
+func f64(v float64) *float64 { return &v }
+
+func mesmoConjunto(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	m := map[string]int{}
+	for _, s := range a {
+		m[s]++
+	}
+	for _, s := range b {
+		if m[s] == 0 {
+			return false
+		}
+		m[s]--
+	}
+	return true
+}
+
 func TestConciliar(t *testing.T) {
 	a := appDeTeste(t)
 	conta := contaDeTeste(t, a)

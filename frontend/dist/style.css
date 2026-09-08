@@ -341,6 +341,45 @@ html, body {
   color: white;
 }
 
+.filter-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.filter-fields input,
+.filter-fields select {
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: white;
+  font-family: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.filter-fields .ff-busca {
+  flex: 1 1 190px;
+  min-width: 160px;
+  max-width: 300px;
+}
+
+.filter-fields .ff-num { width: 84px; }
+.filter-fields .ff-label { font-size: 11.5px; color: var(--text-muted); }
+.filter-fields .ff-sep { color: var(--text-muted); font-size: 12px; }
+
+.filter-fields .ff-limpar {
+  border: none;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 6px;
+}
+.filter-fields .ff-limpar[hidden] { display: none; }
+
 /* ---------- Table ---------- */
 
 .table-wrap {
