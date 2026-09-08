@@ -101,6 +101,7 @@ html, body {
   border-radius: 8px;
   cursor: pointer;
   font-size: 13.5px;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .nav-ico {
@@ -138,23 +139,23 @@ html, body {
 .nav-parent.ativo .nav-ico { opacity: 1; }
 
 .nav-sub {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 0.24s ease;
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.32s ease;
 }
-.nav-group.aberto .nav-sub { grid-template-rows: 1fr; }
+.nav-group.aberto .nav-sub { max-height: 220px; }
 
 .nav-sub-inner {
-  min-height: 0;
-  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 2px;
   opacity: 0;
-  transition: opacity 0.16s ease;
+  transform: translateY(-10px);
+  transition: opacity 0.26s ease, transform 0.28s ease;
 }
 .nav-group.aberto .nav-sub-inner {
   opacity: 1;
+  transform: translateY(0);
   margin-bottom: 4px;
 }
 
