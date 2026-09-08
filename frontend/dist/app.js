@@ -5,13 +5,19 @@
 (() => {
   const App = window.go.main.App;
 
+  function filtroVazio() {
+    return {
+      status: 'todos', busca: '', categoriaId: '', contaId: '',
+      vencDe: '', vencAte: '', valorMin: '', valorMax: ''
+    };
+  }
+
   const state = {
     categorias: [],
     contas: [],
     empresas: [],
     empresaAtivaId: null,
-    filtroPagar: 'todos',
-    filtroReceber: 'todos'
+    filtros: { pagar: filtroVazio(), receber: filtroVazio() }
   };
 
   let ddEmpresa = null;
@@ -64,15 +70,46 @@
   // Navegação entre páginas
   // ---------------------------------------------------------------
 
+  // grupo pai -> páginas dos submenus
+  const NAV_GRUPOS = {
+    movimentacoes: ['pagar', 'receber', 'fluxo'],
+    relatorios: ['dre'],
+    cadastros: ['empresas', 'categorias', 'contas']
+  };
+
   function setupNav() {
-    document.querySelectorAll('.nav-item').forEach((btn) => {
+    document.querySelectorAll('.nav-parent').forEach((btn) => {
+      btn.addEventListener('click', () => alternarGrupo(btn.closest('.nav-group')));
+    });
+    document.querySelectorAll('.nav-item[data-page]').forEach((btn) => {
       btn.addEventListener('click', () => goToPage(btn.dataset.page));
     });
   }
 
+  function setGrupoAberto(grupo, aberto) {
+    grupo.classList.toggle('aberto', aberto);
+    grupo.querySelector('.nav-parent').setAttribute('aria-expanded', String(aberto));
+  }
+
+  // accordion: abrir um grupo fecha os demais
+  function alternarGrupo(grupo) {
+    const abrir = !grupo.classList.contains('aberto');
+    document.querySelectorAll('.nav-group').forEach((g) => setGrupoAberto(g, false));
+    if (abrir) setGrupoAberto(grupo, true);
+  }
+
   function goToPage(page) {
-    document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.page === page));
-    document.querySelectorAll('.page').forEach((p) => p.classList.toggle('active', p.id === `page-${page}`));
+    document.querySelectorAll('.nav-item[data-page]').forEach((b) =>
+      b.classList.toggle('active', b.dataset.page === page));
+    document.querySelectorAll('.page').forEach((p) =>
+      p.classList.toggle('active', p.id === `page-${page}`));
+
+    const grupoAtivo = Object.keys(NAV_GRUPOS).find((g) => NAV_GRUPOS[g].includes(page));
+    document.querySelectorAll('.nav-group').forEach((g) => {
+      const ehAtivo = g.dataset.group === grupoAtivo;
+      g.querySelector('.nav-parent').classList.toggle('ativo', ehAtivo);
+      setGrupoAberto(g, ehAtivo);
+    });
 
     if (page === 'dashboard') loadDashboard();
     if (page === 'pagar') loadLancamentos('pagar');
@@ -80,11 +117,11 @@
     if (page === 'fluxo') loadFluxo();
     if (page === 'dre') loadDre();
     if (page === 'empresas') carregarEmpresas();
-    if (page === 'cadastros') loadCadastros();
+    if (page === 'categorias' || page === 'contas') loadCadastros();
   }
 
   function paginaAtual() {
-    const ativa = document.querySelector('.nav-item.active');
+    const ativa = document.querySelector('.nav-item[data-page].active');
     return ativa ? ativa.dataset.page : 'dashboard';
   }
 
@@ -210,8 +247,6 @@
   async function loadDashboard() {
     const resumo = await App.DashboardResumo();
 
-    document.getElementById('dash-hoje').textContent =
-      'Atualizado em ' + fmtDate(resumo.hoje);
     document.getElementById('card-saldo').textContent = fmtMoney(resumo.saldoAtual);
     document.getElementById('card-areceber').textContent = fmtMoney(resumo.totalAReceber);
     document.getElementById('card-apagar').textContent = fmtMoney(resumo.totalAPagar);
@@ -259,6 +294,7 @@
     const ctx = canvas.getContext('2d');
     const W = canvas.width, H = canvas.height;
     ctx.clearRect(0, 0, W, H);
+    canvas._bars = []; // áreas de hover para o tooltip
 
     if (series.length === 0) return;
 
@@ -301,17 +337,62 @@
 
       const ha = (s.a / maxVal) * chartH;
       const hb = (s.b / maxVal) * chartH;
+      const ya = H - padding.bottom - ha;
+      const yb = H - padding.bottom - hb;
 
       ctx.fillStyle = '#16a34a';
-      ctx.fillRect(xa, H - padding.bottom - ha, barW, ha);
+      ctx.fillRect(xa, ya, barW, ha);
 
       ctx.fillStyle = '#dc2626';
-      ctx.fillRect(xb, H - padding.bottom - hb, barW, hb);
+      ctx.fillRect(xb, yb, barW, hb);
 
       ctx.fillStyle = '#64748b';
       ctx.textAlign = 'center';
       ctx.fillText(s.label, groupX + groupW / 2, H - padding.bottom + 14);
+
+      if (s.a > 0) canvas._bars.push({ x: xa, y: ya, w: barW, h: ha, label: s.label, serie: 'Entradas', valor: s.a });
+      if (s.b > 0) canvas._bars.push({ x: xb, y: yb, w: barW, h: hb, label: s.label, serie: 'Saídas', valor: s.b });
     });
+  }
+
+  // Tooltip flutuante ao passar o mouse sobre as barras do gráfico.
+  function setupChartTooltip() {
+    const canvas = document.getElementById('chart-fluxo');
+    if (!canvas) return;
+
+    let tip = null;
+    const getTip = () => {
+      if (!tip) {
+        tip = document.createElement('div');
+        tip.className = 'chart-tooltip';
+        tip.hidden = true;
+        document.body.appendChild(tip);
+      }
+      return tip;
+    };
+    const esconder = () => { if (tip) tip.hidden = true; canvas.style.cursor = ''; };
+
+    canvas.addEventListener('mousemove', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const sx = canvas.width / rect.width;
+      const sy = canvas.height / rect.height;
+      const px = (e.clientX - rect.left) * sx;
+      const py = (e.clientY - rect.top) * sy;
+      const alvo = (canvas._bars || []).find((b) =>
+        px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h);
+
+      if (!alvo) { esconder(); return; }
+
+      const el = getTip();
+      canvas.style.cursor = 'pointer';
+      el.innerHTML = `<span class="ct-label">${escapeHtml(alvo.label)} · ${alvo.serie}</span>`
+        + `<span class="ct-val">${fmtMoney(alvo.valor)}</span>`;
+      el.hidden = false;
+      const flipX = e.clientX + 160 > window.innerWidth;
+      el.style.left = (flipX ? e.clientX - el.offsetWidth - 12 : e.clientX + 14) + 'px';
+      el.style.top = Math.max(8, e.clientY - el.offsetHeight - 10) + 'px';
+    });
+    canvas.addEventListener('mouseleave', esconder);
   }
 
   function shortMoney(v) {
@@ -337,20 +418,101 @@
         btn.addEventListener('click', () => {
           wrap.querySelectorAll('.filter-btn').forEach((b) => b.classList.remove('active'));
           btn.classList.add('active');
-          if (tipo === 'pagar') state.filtroPagar = valor; else state.filtroReceber = valor;
+          state.filtros[tipo].status = valor;
           loadLancamentos(tipo);
         });
         wrap.appendChild(btn);
       });
+      atualizarBotaoFiltro(tipo);
     });
   }
 
-  async function loadLancamentos(tipo) {
-    const filtroStatus = tipo === 'pagar' ? state.filtroPagar : state.filtroReceber;
-    const filtros = { tipo, status: '', dataInicio: '', dataFim: '' };
-    if (filtroStatus !== 'todos') filtros.status = filtroStatus;
+  // ---------------------------------------------------------------
+  // Modal de filtros por campo (aberto pelo ícone ao lado de "Exportar")
+  // ---------------------------------------------------------------
 
-    const itens = await App.ListLancamentos(filtros);
+  const camposFiltro = ['busca', 'categoriaId', 'contaId', 'vencDe', 'vencAte', 'valorMin', 'valorMax'];
+  let filtroModalTipo = null;
+  let filtroDraft = null;
+
+  function temFiltroAtivo(tipo) {
+    const f = state.filtros[tipo];
+    return camposFiltro.some((k) => f[k] !== '');
+  }
+
+  // atualizarBotaoFiltro marca o ícone de filtro quando há filtro por campo
+  // aplicado, para ficar visível mesmo com o modal fechado.
+  function atualizarBotaoFiltro(tipo) {
+    const btn = document.querySelector(`[data-open-filtros="${tipo}"]`);
+    if (btn) btn.classList.toggle('tem-filtro', temFiltroAtivo(tipo));
+  }
+
+  function setupModalFiltros() {
+    document.querySelectorAll('[data-open-filtros]').forEach((btn) => {
+      btn.addEventListener('click', () => abrirModalFiltros(btn.dataset.openFiltros));
+    });
+    document.querySelectorAll('[data-close-modal="filtros"]').forEach((btn) => {
+      btn.addEventListener('click', () => closeModal('filtros'));
+    });
+    document.getElementById('filtros-limpar').addEventListener('click', () => {
+      filtroDraft = { status: filtroDraft.status };
+      camposFiltro.forEach((k) => { filtroDraft[k] = ''; });
+      preencherModalFiltros();
+      state.filtros[filtroModalTipo] = { ...filtroDraft };
+      atualizarBotaoFiltro(filtroModalTipo);
+      loadLancamentos(filtroModalTipo);
+    });
+    document.getElementById('filtros-aplicar').addEventListener('click', () => {
+      state.filtros[filtroModalTipo] = { ...filtroDraft };
+      atualizarBotaoFiltro(filtroModalTipo);
+      loadLancamentos(filtroModalTipo);
+      closeModal('filtros');
+    });
+  }
+
+  function abrirModalFiltros(tipo) {
+    filtroModalTipo = tipo;
+    filtroDraft = { ...state.filtros[tipo] };
+
+    const catTipo = tipo === 'pagar' ? 'despesa' : 'receita';
+    const cats = state.categorias.filter((c) => c.tipo === catTipo);
+    document.getElementById('filtros-titulo').textContent =
+      'Filtrar ' + (tipo === 'pagar' ? 'contas a pagar' : 'contas a receber');
+    document.getElementById('filtros-categoria').innerHTML =
+      '<option value="">Todas</option>' +
+      cats.map((c) => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join('');
+    document.getElementById('filtros-conta').innerHTML =
+      '<option value="">Todas</option>' +
+      state.contas.map((c) => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join('');
+
+    preencherModalFiltros();
+    openModal('filtros');
+  }
+
+  function preencherModalFiltros() {
+    document.querySelectorAll('#modal-filtros [data-ff]').forEach((el) => {
+      el.value = filtroDraft[el.dataset.ff] || '';
+      el.oninput = el.onchange = () => { filtroDraft[el.dataset.ff] = el.value; };
+    });
+  }
+
+  function filtroPayload(tipo) {
+    const f = state.filtros[tipo];
+    return {
+      tipo,
+      status: f.status === 'todos' ? '' : f.status,
+      dataInicio: f.vencDe || '',
+      dataFim: f.vencAte || '',
+      busca: f.busca.trim(),
+      categoriaId: f.categoriaId ? Number(f.categoriaId) : null,
+      contaId: f.contaId ? Number(f.contaId) : null,
+      valorMin: f.valorMin !== '' ? Number(f.valorMin) : null,
+      valorMax: f.valorMax !== '' ? Number(f.valorMax) : null
+    };
+  }
+
+  async function loadLancamentos(tipo) {
+    const itens = await App.ListLancamentos(filtroPayload(tipo));
     const tbody = document.querySelector(`#table-${tipo} tbody`);
     tbody.innerHTML = '';
 
@@ -500,10 +662,31 @@
 
   let ofxPrevia = null;
 
+  // ícone de "upload" para o dropdown Importar
+  const IMPORT_ICO = 'M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z';
+
   function setupImportacaoOFX() {
-    document.querySelectorAll('[data-open-ofx]').forEach((btn) => {
-      btn.addEventListener('click', openModalOFX);
+    document.querySelectorAll('.dd.import').forEach((root) => {
+      root.innerHTML = `
+        <button type="button" class="dd-trigger" aria-haspopup="menu" aria-expanded="false">
+          <svg class="dd-lead" viewBox="0 0 24 24" aria-hidden="true"><path d="${IMPORT_ICO}"/></svg>
+          <span class="dd-txt">Importar</span>
+          <svg class="dd-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z"/></svg>
+        </button>
+        <div class="dd-menu right" role="menu" hidden>
+          <button type="button" class="dd-item" role="menuitem" data-import-tipo="ofx">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z"/></svg>OFX
+          </button>
+        </div>`;
+      const dd = initDropdown(root);
+      root.querySelectorAll('.dd-item').forEach((it) => {
+        it.addEventListener('click', () => {
+          dd.close();
+          if (it.dataset.importTipo === 'ofx') openModalOFX();
+        });
+      });
     });
+
     document.querySelectorAll('[data-close-modal="ofx"]').forEach((btn) => {
       btn.addEventListener('click', () => closeModal('ofx'));
     });
@@ -925,11 +1108,7 @@
           fmt
         );
       } else if (alvo === 'pagar' || alvo === 'receber') {
-        const filtroStatus = alvo === 'pagar' ? state.filtroPagar : state.filtroReceber;
-        caminho = await App.ExportarLancamentos(
-          { tipo: alvo, status: filtroStatus === 'todos' ? '' : filtroStatus, dataInicio: '', dataFim: '' },
-          fmt
-        );
+        caminho = await App.ExportarLancamentos(filtroPayload(alvo), fmt);
       }
       if (caminho) toast('Relatório salvo em ' + caminho);
     } catch (err) {
@@ -988,10 +1167,8 @@
     if (estado === 'disponivel') {
       updateState.at = dados;
       el.innerHTML = `
-        <span class="update-msg">Fynam <strong>${escapeHtml(dados.versaoNova)}</strong> disponível
-          <span class="update-sub">(você está na ${escapeHtml(dados.versaoAtual)})</span></span>
+        <span class="update-msg">Fynam <strong>${escapeHtml(dados.versaoNova)}</strong> disponível</span>
         <span class="update-actions">
-          <button class="btn btn-ghost" data-upd="notas">Ver notas</button>
           <button class="btn btn-primary" data-upd="aplicar">Atualizar agora</button>
           <button class="btn btn-ghost" data-upd="depois">Depois</button>
         </span>`;
@@ -1015,10 +1192,6 @@
   }
 
   async function acaoUpdate(acao) {
-    if (acao === 'notas' && updateState.at) {
-      window.runtime.BrowserOpenURL(updateState.at.url);
-      return;
-    }
     if (acao === 'depois') {
       bannerEl().className = 'update-banner';
       return;
@@ -1063,6 +1236,30 @@
     } catch (_) { /* mantém o texto padrão */ }
   }
 
+  function setupCheckUpdate() {
+    const btn = document.getElementById('btn-check-update');
+    if (btn) btn.addEventListener('click', verificarAtualizacaoManual);
+  }
+
+  async function verificarAtualizacaoManual() {
+    const btn = document.getElementById('btn-check-update');
+    if (btn.classList.contains('girando')) return;
+    btn.classList.add('girando');
+    try {
+      const at = await App.VerificarAtualizacao();
+      if (at && at.versaoNova) {
+        bannerUpdate('disponivel', at);
+      } else {
+        toast('Você já está na versão mais recente.');
+      }
+    } catch (err) {
+      toast('Não foi possível verificar atualizações: '
+        + String(err && err.message ? err.message : err), true);
+    } finally {
+      btn.classList.remove('girando');
+    }
+  }
+
   async function boot() {
     setupNav();
     setupFiltros();
@@ -1074,6 +1271,9 @@
     setupUpdate();
     setupEmpresas();
     setupImportacaoOFX();
+    setupModalFiltros();
+    setupChartTooltip();
+    setupCheckUpdate();
     mostrarVersao();
     await carregarEmpresas();
     await refreshCategoriasEContas();

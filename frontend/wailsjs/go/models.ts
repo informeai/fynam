@@ -379,6 +379,11 @@ export namespace model {
 	    status: string;
 	    dataInicio: string;
 	    dataFim: string;
+	    busca: string;
+	    categoriaId?: number;
+	    contaId?: number;
+	    valorMin?: number;
+	    valorMax?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new LancamentoFiltro(source);
@@ -390,6 +395,11 @@ export namespace model {
 	        this.status = source["status"];
 	        this.dataInicio = source["dataInicio"];
 	        this.dataFim = source["dataFim"];
+	        this.busca = source["busca"];
+	        this.categoriaId = source["categoriaId"];
+	        this.contaId = source["contaId"];
+	        this.valorMin = source["valorMin"];
+	        this.valorMax = source["valorMax"];
 	    }
 	}
 	export class LancamentoInput {

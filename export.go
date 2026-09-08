@@ -171,6 +171,20 @@ func tabelaDRE(dataInicio string, dataFim string, dre DRE) report.Tabela {
 	return t
 }
 
+// faixaValor descreve um intervalo de valor para o subtítulo do relatório.
+func faixaValor(min, max *float64) string {
+	switch {
+	case min != nil && max != nil:
+		return report.FormatarMoeda(*min) + " a " + report.FormatarMoeda(*max)
+	case min != nil:
+		return "a partir de " + report.FormatarMoeda(*min)
+	case max != nil:
+		return "até " + report.FormatarMoeda(*max)
+	default:
+		return ""
+	}
+}
+
 func tabelaLancamentos(filtro model.LancamentoFiltro, itens []model.Lancamento, categorias []model.Categoria) report.Tabela {
 	nomeCategoria := make(map[int]string, len(categorias))
 	for _, c := range categorias {
@@ -194,6 +208,17 @@ func tabelaLancamentos(filtro model.LancamentoFiltro, itens []model.Lancamento, 
 	}
 	if filtro.DataFim != "" {
 		partesSub = append(partesSub, "até "+dataBR(filtro.DataFim))
+	}
+	if filtro.Busca != "" {
+		partesSub = append(partesSub, "Busca: "+filtro.Busca)
+	}
+	if filtro.CategoriaID != nil {
+		if n, ok := nomeCategoria[*filtro.CategoriaID]; ok {
+			partesSub = append(partesSub, "Categoria: "+n)
+		}
+	}
+	if filtro.ValorMin != nil || filtro.ValorMax != nil {
+		partesSub = append(partesSub, "Valor: "+faixaValor(filtro.ValorMin, filtro.ValorMax))
 	}
 	if len(partesSub) == 0 {
 		partesSub = append(partesSub, "Todos os registros")

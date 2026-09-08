@@ -262,9 +262,11 @@ ele serve para a instalação inicial — o updater continua consumindo o `.zip`
 - **Dashboard** — saldo atual, total a pagar/receber em aberto, gráfico dos
   últimos 6 meses (entradas x saídas) e lista dos próximos vencimentos.
 - **Contas a Pagar / Contas a Receber** — cadastro, edição, exclusão,
-  filtro por status (pendente, atrasado, pago/recebido, conciliado), baixa
-  (marcar como pago/recebido, com opção de estornar) e conciliação (marcar
-  como conciliado quando o operador valida, com opção de desconciliar).
+  filtros por status (pendente, atrasado, pago/recebido, conciliado) e por
+  campos (descrição, categoria, conta, período de vencimento, faixa de
+  valor), baixa (marcar como pago/recebido, com opção de estornar) e
+  conciliação (marcar como conciliado quando o operador valida, com opção
+  de desconciliar).
 - **Fluxo de Caixa** — visão mensal (ano selecionável) com entradas,
   saídas, saldo do mês e saldo acumulado.
 - **DRE simplificado** — por período, agrupado por categoria, com receita
