@@ -348,66 +348,76 @@
         });
         wrap.appendChild(btn);
       });
-      montarCamposFiltro(tipo);
+      atualizarBotaoFiltro(tipo);
     });
   }
 
-  function debounce(fn, ms) {
-    let t = null;
-    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  // ---------------------------------------------------------------
+  // Modal de filtros por campo (aberto pelo ícone ao lado de "Exportar")
+  // ---------------------------------------------------------------
+
+  const camposFiltro = ['busca', 'categoriaId', 'contaId', 'vencDe', 'vencAte', 'valorMin', 'valorMax'];
+  let filtroModalTipo = null;
+  let filtroDraft = null;
+
+  function temFiltroAtivo(tipo) {
+    const f = state.filtros[tipo];
+    return camposFiltro.some((k) => f[k] !== '');
   }
 
-  // montarCamposFiltro (re)desenha a linha de filtros por campo de uma das
-  // telas, preservando o que já estava selecionado em state.filtros[tipo].
-  function montarCamposFiltro(tipo) {
-    const wrap = document.querySelector(`.filter-fields[data-filter-fields="${tipo}"]`);
-    if (!wrap) return;
-    const f = state.filtros[tipo];
+  // atualizarBotaoFiltro marca o ícone de filtro quando há filtro por campo
+  // aplicado, para ficar visível mesmo com o modal fechado.
+  function atualizarBotaoFiltro(tipo) {
+    const btn = document.querySelector(`[data-open-filtros="${tipo}"]`);
+    if (btn) btn.classList.toggle('tem-filtro', temFiltroAtivo(tipo));
+  }
+
+  function setupModalFiltros() {
+    document.querySelectorAll('[data-open-filtros]').forEach((btn) => {
+      btn.addEventListener('click', () => abrirModalFiltros(btn.dataset.openFiltros));
+    });
+    document.querySelectorAll('[data-close-modal="filtros"]').forEach((btn) => {
+      btn.addEventListener('click', () => closeModal('filtros'));
+    });
+    document.getElementById('filtros-limpar').addEventListener('click', () => {
+      filtroDraft = { status: filtroDraft.status };
+      camposFiltro.forEach((k) => { filtroDraft[k] = ''; });
+      preencherModalFiltros();
+      state.filtros[filtroModalTipo] = { ...filtroDraft };
+      atualizarBotaoFiltro(filtroModalTipo);
+      loadLancamentos(filtroModalTipo);
+    });
+    document.getElementById('filtros-aplicar').addEventListener('click', () => {
+      state.filtros[filtroModalTipo] = { ...filtroDraft };
+      atualizarBotaoFiltro(filtroModalTipo);
+      loadLancamentos(filtroModalTipo);
+      closeModal('filtros');
+    });
+  }
+
+  function abrirModalFiltros(tipo) {
+    filtroModalTipo = tipo;
+    filtroDraft = { ...state.filtros[tipo] };
+
     const catTipo = tipo === 'pagar' ? 'despesa' : 'receita';
     const cats = state.categorias.filter((c) => c.tipo === catTipo);
+    document.getElementById('filtros-titulo').textContent =
+      'Filtrar ' + (tipo === 'pagar' ? 'contas a pagar' : 'contas a receber');
+    document.getElementById('filtros-categoria').innerHTML =
+      '<option value="">Todas</option>' +
+      cats.map((c) => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join('');
+    document.getElementById('filtros-conta').innerHTML =
+      '<option value="">Todas</option>' +
+      state.contas.map((c) => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join('');
 
-    wrap.innerHTML = `
-      <input type="search" class="ff-busca" placeholder="Buscar descrição…" data-ff="busca" />
-      <select data-ff="categoriaId">
-        <option value="">Categoria: todas</option>
-        ${cats.map((c) => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join('')}
-      </select>
-      <select data-ff="contaId">
-        <option value="">Conta: todas</option>
-        ${state.contas.map((c) => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join('')}
-      </select>
-      <span class="ff-label">Venc.</span>
-      <input type="date" data-ff="vencDe" title="Vencimento de" />
-      <span class="ff-sep">–</span>
-      <input type="date" data-ff="vencAte" title="Vencimento até" />
-      <span class="ff-label">Valor</span>
-      <input type="number" class="ff-num" step="0.01" min="0" placeholder="mín" data-ff="valorMin" />
-      <span class="ff-sep">–</span>
-      <input type="number" class="ff-num" step="0.01" min="0" placeholder="máx" data-ff="valorMax" />
-      <button type="button" class="ff-limpar" data-ff-clear hidden>Limpar</button>`;
+    preencherModalFiltros();
+    openModal('filtros');
+  }
 
-    wrap.querySelectorAll('[data-ff]').forEach((el) => { el.value = f[el.dataset.ff]; });
-
-    const aplicar = debounce(() => loadLancamentos(tipo), 300);
-    const atualizarLimpar = () => {
-      const algum = Object.keys(f).some((k) => k !== 'status' && f[k] !== '');
-      wrap.querySelector('[data-ff-clear]').hidden = !algum;
-    };
-    atualizarLimpar();
-
-    wrap.querySelectorAll('[data-ff]').forEach((el) => {
-      const evento = (el.tagName === 'SELECT' || el.type === 'date') ? 'change' : 'input';
-      el.addEventListener(evento, () => {
-        f[el.dataset.ff] = el.value;
-        atualizarLimpar();
-        aplicar();
-      });
-    });
-    wrap.querySelector('[data-ff-clear]').addEventListener('click', () => {
-      Object.assign(f, filtroVazio());
-      f.status = state.filtros[tipo].status; // status é dos chips, não daqui
-      montarCamposFiltro(tipo);
-      loadLancamentos(tipo);
+  function preencherModalFiltros() {
+    document.querySelectorAll('#modal-filtros [data-ff]').forEach((el) => {
+      el.value = filtroDraft[el.dataset.ff] || '';
+      el.oninput = el.onchange = () => { filtroDraft[el.dataset.ff] = el.value; };
     });
   }
 
@@ -947,9 +957,6 @@
   async function refreshCategoriasEContas() {
     state.categorias = await App.ListCategorias();
     state.contas = await App.ListContas();
-    // recarrega as opções de categoria/conta nos filtros das duas telas
-    montarCamposFiltro('pagar');
-    montarCamposFiltro('receber');
   }
 
   // ---------------------------------------------------------------
@@ -1150,6 +1157,7 @@
     setupUpdate();
     setupEmpresas();
     setupImportacaoOFX();
+    setupModalFiltros();
     mostrarVersao();
     await carregarEmpresas();
     await refreshCategoriasEContas();

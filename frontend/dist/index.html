@@ -105,12 +105,14 @@
           <h1>Contas a Pagar</h1>
           <div class="header-actions">
             <div class="dd export" data-export="pagar"></div>
+            <button class="btn btn-icon" data-open-filtros="pagar" title="Filtros" aria-label="Filtros">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18l-7 8v6l-4 2v-8L3 5z"/></svg>
+            </button>
             <button class="btn btn-secondary" data-open-ofx>Importar extrato (OFX)</button>
             <button class="btn btn-primary" data-open-modal="lancamento" data-tipo="pagar">+ Nova conta a pagar</button>
           </div>
         </header>
         <div class="filters" data-filters="pagar"></div>
-        <div class="filter-fields" data-filter-fields="pagar"></div>
         <div class="table-wrap">
           <table class="table" id="table-pagar">
             <thead>
@@ -130,12 +132,14 @@
           <h1>Contas a Receber</h1>
           <div class="header-actions">
             <div class="dd export" data-export="receber"></div>
+            <button class="btn btn-icon" data-open-filtros="receber" title="Filtros" aria-label="Filtros">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18l-7 8v6l-4 2v-8L3 5z"/></svg>
+            </button>
             <button class="btn btn-secondary" data-open-ofx>Importar extrato (OFX)</button>
             <button class="btn btn-primary" data-open-modal="lancamento" data-tipo="receber">+ Nova conta a receber</button>
           </div>
         </header>
         <div class="filters" data-filters="receber"></div>
-        <div class="filter-fields" data-filter-fields="receber"></div>
         <div class="table-wrap">
           <table class="table" id="table-receber">
             <thead>
@@ -330,6 +334,45 @@
         <button type="button" class="btn btn-ghost" id="ask-cancel">Cancelar</button>
         <button type="button" class="btn btn-primary" id="ask-ok">Confirmar</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL: filtros ===================== -->
+  <div class="modal-backdrop" id="modal-filtros">
+    <div class="modal">
+      <h2 id="filtros-titulo">Filtrar lançamentos</h2>
+      <form id="form-filtros" onsubmit="return false">
+        <label>Descrição contém</label>
+        <input type="search" id="filtros-busca" data-ff="busca" placeholder="ex.: aluguel, energia…" />
+
+        <label>Categoria</label>
+        <select id="filtros-categoria" data-ff="categoriaId"></select>
+
+        <label>Conta / Caixa</label>
+        <select id="filtros-conta" data-ff="contaId"></select>
+
+        <label>Vencimento</label>
+        <div class="filtros-intervalo">
+          <input type="date" id="filtros-venc-de" data-ff="vencDe" title="de" />
+          <span>até</span>
+          <input type="date" id="filtros-venc-ate" data-ff="vencAte" title="até" />
+        </div>
+
+        <label>Valor (R$)</label>
+        <div class="filtros-intervalo">
+          <input type="number" id="filtros-valor-min" data-ff="valorMin" step="0.01" min="0" placeholder="mínimo" />
+          <span>até</span>
+          <input type="number" id="filtros-valor-max" data-ff="valorMax" step="0.01" min="0" placeholder="máximo" />
+        </div>
+
+        <div class="modal-actions modal-actions-split">
+          <button type="button" class="btn btn-ghost" id="filtros-limpar">Limpar filtros</button>
+          <span class="modal-actions-dir">
+            <button type="button" class="btn btn-ghost" data-close-modal="filtros">Cancelar</button>
+            <button type="button" class="btn btn-primary" id="filtros-aplicar">Aplicar filtros</button>
+          </span>
+        </div>
+      </form>
     </div>
   </div>
 
