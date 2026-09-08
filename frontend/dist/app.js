@@ -247,8 +247,6 @@
   async function loadDashboard() {
     const resumo = await App.DashboardResumo();
 
-    document.getElementById('dash-hoje').textContent =
-      'Atualizado em ' + fmtDate(resumo.hoje);
     document.getElementById('card-saldo').textContent = fmtMoney(resumo.saldoAtual);
     document.getElementById('card-areceber').textContent = fmtMoney(resumo.totalAReceber);
     document.getElementById('card-apagar').textContent = fmtMoney(resumo.totalAPagar);
@@ -1192,6 +1190,30 @@
     } catch (_) { /* mantém o texto padrão */ }
   }
 
+  function setupCheckUpdate() {
+    const btn = document.getElementById('btn-check-update');
+    if (btn) btn.addEventListener('click', verificarAtualizacaoManual);
+  }
+
+  async function verificarAtualizacaoManual() {
+    const btn = document.getElementById('btn-check-update');
+    if (btn.classList.contains('girando')) return;
+    btn.classList.add('girando');
+    try {
+      const at = await App.VerificarAtualizacao();
+      if (at && at.versaoNova) {
+        bannerUpdate('disponivel', at);
+      } else {
+        toast('Você já está na versão mais recente.');
+      }
+    } catch (err) {
+      toast('Não foi possível verificar atualizações: '
+        + String(err && err.message ? err.message : err), true);
+    } finally {
+      btn.classList.remove('girando');
+    }
+  }
+
   async function boot() {
     setupNav();
     setupFiltros();
@@ -1204,6 +1226,7 @@
     setupEmpresas();
     setupImportacaoOFX();
     setupModalFiltros();
+    setupCheckUpdate();
     mostrarVersao();
     await carregarEmpresas();
     await refreshCategoriasEContas();

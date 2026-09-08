@@ -151,10 +151,30 @@ html, body {
 }
 
 .sidebar-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 11px;
   color: #64748b;
   padding: 8px;
 }
+
+.sidebar-update-btn {
+  display: inline-flex;
+  padding: 4px;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.sidebar-update-btn svg { width: 15px; height: 15px; fill: currentColor; }
+.sidebar-update-btn:hover {
+  color: var(--sidebar-fg);
+  background: rgba(255, 255, 255, 0.06);
+}
+.sidebar-update-btn.girando svg { animation: girar 0.8s linear infinite; }
+@keyframes girar { to { transform: rotate(360deg); } }
 
 /* ---------- Seletor de empresa ---------- */
 
