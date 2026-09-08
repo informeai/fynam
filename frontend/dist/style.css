@@ -289,11 +289,6 @@ html, body {
   gap: 16px;
 }
 
-.panels.panels-um {
-  grid-template-columns: 1fr;
-  max-width: 640px;
-}
-
 .panel {
   background: var(--card-bg);
   border: 1px solid var(--border);
@@ -315,7 +310,7 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 320px;
+  max-height: min(62vh, 560px);
   overflow-y: auto;
 }
 

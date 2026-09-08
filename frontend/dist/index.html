@@ -265,9 +265,9 @@
         <header class="page-header">
           <h1>Contas / Caixa</h1>
         </header>
-        <div class="panels panels-um">
+        <div class="panels">
           <div class="panel">
-            <h2>Contas bancárias / Caixas</h2>
+            <h2>Nova conta / caixa</h2>
             <form id="form-conta" class="inline-form">
               <input type="text" id="conta-nome" placeholder="Nome da conta" required />
               <input type="number" id="conta-saldo" placeholder="Saldo inicial" step="0.01" />
@@ -281,6 +281,10 @@
               </select>
               <button class="btn btn-secondary" type="submit">Adicionar</button>
             </form>
+            <p class="subtitle">Código do banco, número e tipo são usados na conciliação por extrato (OFX).</p>
+          </div>
+          <div class="panel">
+            <h2>Contas cadastradas</h2>
             <div id="lista-contas" class="mini-list"></div>
           </div>
         </div>
@@ -290,9 +294,9 @@
         <header class="page-header">
           <h1>Categorias</h1>
         </header>
-        <div class="panels panels-um">
+        <div class="panels">
           <div class="panel">
-            <h2>Categorias (plano de contas)</h2>
+            <h2>Nova categoria</h2>
             <form id="form-categoria" class="inline-form">
               <input type="text" id="categoria-nome" placeholder="Nome da categoria" required />
               <select id="categoria-tipo">
@@ -301,6 +305,10 @@
               </select>
               <button class="btn btn-secondary" type="submit">Adicionar</button>
             </form>
+            <p class="subtitle">Categorias de receita entram em contas a receber; de despesa, em contas a pagar.</p>
+          </div>
+          <div class="panel">
+            <h2>Categorias cadastradas</h2>
             <div id="lista-categorias" class="mini-list"></div>
           </div>
         </div>
