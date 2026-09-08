@@ -832,7 +832,7 @@ tr.ofx-feita { opacity: 0.5; }
 
 .update-banner {
   position: fixed;
-  top: 0;
+  bottom: 0;
   left: 0;
   right: 0;
   display: flex;
@@ -844,19 +844,14 @@ tr.ofx-feita { opacity: 0.5; }
   background: var(--sidebar-bg);
   color: white;
   font-size: 13px;
-  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.25);
-  transform: translateY(-100%);
+  box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.25);
+  transform: translateY(100%);
   transition: transform 0.25s ease;
   z-index: 90;
 }
 
 .update-banner.show {
   transform: translateY(0);
-}
-
-.update-banner .update-sub {
-  color: var(--sidebar-fg);
-  margin-left: 4px;
 }
 
 .update-banner .update-actions {

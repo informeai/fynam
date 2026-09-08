@@ -1123,8 +1123,7 @@
     if (estado === 'disponivel') {
       updateState.at = dados;
       el.innerHTML = `
-        <span class="update-msg">Fynam <strong>${escapeHtml(dados.versaoNova)}</strong> disponível
-          <span class="update-sub">(você está na ${escapeHtml(dados.versaoAtual)})</span></span>
+        <span class="update-msg">Fynam <strong>${escapeHtml(dados.versaoNova)}</strong> disponível</span>
         <span class="update-actions">
           <button class="btn btn-primary" data-upd="aplicar">Atualizar agora</button>
           <button class="btn btn-ghost" data-upd="depois">Depois</button>
