@@ -587,10 +587,31 @@
 
   let ofxPrevia = null;
 
+  // ícone de "upload" para o dropdown Importar
+  const IMPORT_ICO = 'M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z';
+
   function setupImportacaoOFX() {
-    document.querySelectorAll('[data-open-ofx]').forEach((btn) => {
-      btn.addEventListener('click', openModalOFX);
+    document.querySelectorAll('.dd.import').forEach((root) => {
+      root.innerHTML = `
+        <button type="button" class="dd-trigger" aria-haspopup="menu" aria-expanded="false">
+          <svg class="dd-lead" viewBox="0 0 24 24" aria-hidden="true"><path d="${IMPORT_ICO}"/></svg>
+          <span class="dd-txt">Importar</span>
+          <svg class="dd-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z"/></svg>
+        </button>
+        <div class="dd-menu right" role="menu" hidden>
+          <button type="button" class="dd-item" role="menuitem" data-import-tipo="ofx">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z"/></svg>OFX
+          </button>
+        </div>`;
+      const dd = initDropdown(root);
+      root.querySelectorAll('.dd-item').forEach((it) => {
+        it.addEventListener('click', () => {
+          dd.close();
+          if (it.dataset.importTipo === 'ofx') openModalOFX();
+        });
+      });
     });
+
     document.querySelectorAll('[data-close-modal="ofx"]').forEach((btn) => {
       btn.addEventListener('click', () => closeModal('ofx'));
     });
