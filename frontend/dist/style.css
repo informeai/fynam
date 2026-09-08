@@ -122,6 +122,34 @@ html, body {
   color: white;
 }
 
+/* grupos com submenu */
+.nav-group { display: flex; flex-direction: column; gap: 2px; }
+
+.nav-parent .nav-chevron {
+  width: 15px;
+  height: 15px;
+  margin-left: auto;
+  fill: currentColor;
+  opacity: 0.55;
+  transition: transform 0.15s ease;
+}
+.nav-parent[aria-expanded="true"] .nav-chevron { transform: rotate(180deg); }
+.nav-parent.ativo { color: #fff; }
+.nav-parent.ativo .nav-ico { opacity: 1; }
+
+.nav-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 4px;
+}
+.nav-sub[hidden] { display: none; }
+
+.nav-child {
+  padding: 8px 12px 8px 40px;
+  font-size: 13px;
+}
+
 .sidebar-footer {
   font-size: 11px;
   color: #64748b;
@@ -259,6 +287,11 @@ html, body {
   display: grid;
   grid-template-columns: 1.4fr 1fr;
   gap: 16px;
+}
+
+.panels.panels-um {
+  grid-template-columns: 1fr;
+  max-width: 640px;
 }
 
 .panel {

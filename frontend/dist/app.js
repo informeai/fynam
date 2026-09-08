@@ -70,15 +70,46 @@
   // Navegação entre páginas
   // ---------------------------------------------------------------
 
+  // grupo pai -> páginas dos submenus
+  const NAV_GRUPOS = {
+    movimentacoes: ['pagar', 'receber', 'fluxo'],
+    relatorios: ['dre'],
+    cadastros: ['empresas', 'categorias', 'contas']
+  };
+
   function setupNav() {
-    document.querySelectorAll('.nav-item').forEach((btn) => {
+    document.querySelectorAll('.nav-parent').forEach((btn) => {
+      btn.addEventListener('click', () => alternarGrupo(btn.closest('.nav-group')));
+    });
+    document.querySelectorAll('.nav-item[data-page]').forEach((btn) => {
       btn.addEventListener('click', () => goToPage(btn.dataset.page));
     });
   }
 
+  function setGrupoAberto(grupo, aberto) {
+    grupo.querySelector('.nav-sub').hidden = !aberto;
+    grupo.querySelector('.nav-parent').setAttribute('aria-expanded', String(aberto));
+  }
+
+  // accordion: abrir um grupo fecha os demais
+  function alternarGrupo(grupo) {
+    const abrir = grupo.querySelector('.nav-sub').hidden;
+    document.querySelectorAll('.nav-group').forEach((g) => setGrupoAberto(g, false));
+    if (abrir) setGrupoAberto(grupo, true);
+  }
+
   function goToPage(page) {
-    document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.page === page));
-    document.querySelectorAll('.page').forEach((p) => p.classList.toggle('active', p.id === `page-${page}`));
+    document.querySelectorAll('.nav-item[data-page]').forEach((b) =>
+      b.classList.toggle('active', b.dataset.page === page));
+    document.querySelectorAll('.page').forEach((p) =>
+      p.classList.toggle('active', p.id === `page-${page}`));
+
+    const grupoAtivo = Object.keys(NAV_GRUPOS).find((g) => NAV_GRUPOS[g].includes(page));
+    document.querySelectorAll('.nav-group').forEach((g) => {
+      const ehAtivo = g.dataset.group === grupoAtivo;
+      g.querySelector('.nav-parent').classList.toggle('ativo', ehAtivo);
+      setGrupoAberto(g, ehAtivo);
+    });
 
     if (page === 'dashboard') loadDashboard();
     if (page === 'pagar') loadLancamentos('pagar');
@@ -86,11 +117,11 @@
     if (page === 'fluxo') loadFluxo();
     if (page === 'dre') loadDre();
     if (page === 'empresas') carregarEmpresas();
-    if (page === 'cadastros') loadCadastros();
+    if (page === 'categorias' || page === 'contas') loadCadastros();
   }
 
   function paginaAtual() {
-    const ativa = document.querySelector('.nav-item.active');
+    const ativa = document.querySelector('.nav-item[data-page].active');
     return ativa ? ativa.dataset.page : 'dashboard';
   }
 
