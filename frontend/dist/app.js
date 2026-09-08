@@ -294,6 +294,7 @@
     const ctx = canvas.getContext('2d');
     const W = canvas.width, H = canvas.height;
     ctx.clearRect(0, 0, W, H);
+    canvas._bars = []; // áreas de hover para o tooltip
 
     if (series.length === 0) return;
 
@@ -336,17 +337,62 @@
 
       const ha = (s.a / maxVal) * chartH;
       const hb = (s.b / maxVal) * chartH;
+      const ya = H - padding.bottom - ha;
+      const yb = H - padding.bottom - hb;
 
       ctx.fillStyle = '#16a34a';
-      ctx.fillRect(xa, H - padding.bottom - ha, barW, ha);
+      ctx.fillRect(xa, ya, barW, ha);
 
       ctx.fillStyle = '#dc2626';
-      ctx.fillRect(xb, H - padding.bottom - hb, barW, hb);
+      ctx.fillRect(xb, yb, barW, hb);
 
       ctx.fillStyle = '#64748b';
       ctx.textAlign = 'center';
       ctx.fillText(s.label, groupX + groupW / 2, H - padding.bottom + 14);
+
+      if (s.a > 0) canvas._bars.push({ x: xa, y: ya, w: barW, h: ha, label: s.label, serie: 'Entradas', valor: s.a });
+      if (s.b > 0) canvas._bars.push({ x: xb, y: yb, w: barW, h: hb, label: s.label, serie: 'Saídas', valor: s.b });
     });
+  }
+
+  // Tooltip flutuante ao passar o mouse sobre as barras do gráfico.
+  function setupChartTooltip() {
+    const canvas = document.getElementById('chart-fluxo');
+    if (!canvas) return;
+
+    let tip = null;
+    const getTip = () => {
+      if (!tip) {
+        tip = document.createElement('div');
+        tip.className = 'chart-tooltip';
+        tip.hidden = true;
+        document.body.appendChild(tip);
+      }
+      return tip;
+    };
+    const esconder = () => { if (tip) tip.hidden = true; canvas.style.cursor = ''; };
+
+    canvas.addEventListener('mousemove', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const sx = canvas.width / rect.width;
+      const sy = canvas.height / rect.height;
+      const px = (e.clientX - rect.left) * sx;
+      const py = (e.clientY - rect.top) * sy;
+      const alvo = (canvas._bars || []).find((b) =>
+        px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h);
+
+      if (!alvo) { esconder(); return; }
+
+      const el = getTip();
+      canvas.style.cursor = 'pointer';
+      el.innerHTML = `<span class="ct-label">${escapeHtml(alvo.label)} · ${alvo.serie}</span>`
+        + `<span class="ct-val">${fmtMoney(alvo.valor)}</span>`;
+      el.hidden = false;
+      const flipX = e.clientX + 160 > window.innerWidth;
+      el.style.left = (flipX ? e.clientX - el.offsetWidth - 12 : e.clientX + 14) + 'px';
+      el.style.top = Math.max(8, e.clientY - el.offsetHeight - 10) + 'px';
+    });
+    canvas.addEventListener('mouseleave', esconder);
   }
 
   function shortMoney(v) {
@@ -1226,6 +1272,7 @@
     setupEmpresas();
     setupImportacaoOFX();
     setupModalFiltros();
+    setupChartTooltip();
     setupCheckUpdate();
     mostrarVersao();
     await carregarEmpresas();

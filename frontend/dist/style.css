@@ -864,6 +864,28 @@ tr.ofx-feita { opacity: 0.5; }
   background: var(--red);
 }
 
+/* ---------- Tooltip do gráfico ---------- */
+
+.chart-tooltip {
+  position: fixed;
+  z-index: 100;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  white-space: nowrap;
+  padding: 6px 9px;
+  border-radius: 7px;
+  background: var(--sidebar-bg);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.35;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.25);
+}
+.chart-tooltip[hidden] { display: none; }
+.chart-tooltip .ct-label { color: var(--sidebar-fg); font-size: 11px; }
+.chart-tooltip .ct-val { font-weight: 600; }
+
 /* ---------- Banner de atualização ---------- */
 
 .update-banner {
