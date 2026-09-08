@@ -87,13 +87,13 @@
   }
 
   function setGrupoAberto(grupo, aberto) {
-    grupo.querySelector('.nav-sub').hidden = !aberto;
+    grupo.classList.toggle('aberto', aberto);
     grupo.querySelector('.nav-parent').setAttribute('aria-expanded', String(aberto));
   }
 
   // accordion: abrir um grupo fecha os demais
   function alternarGrupo(grupo) {
-    const abrir = grupo.querySelector('.nav-sub').hidden;
+    const abrir = !grupo.classList.contains('aberto');
     document.querySelectorAll('.nav-group').forEach((g) => setGrupoAberto(g, false));
     if (abrir) setGrupoAberto(grupo, true);
   }
