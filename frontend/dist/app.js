@@ -1126,7 +1126,6 @@
         <span class="update-msg">Fynam <strong>${escapeHtml(dados.versaoNova)}</strong> disponível
           <span class="update-sub">(você está na ${escapeHtml(dados.versaoAtual)})</span></span>
         <span class="update-actions">
-          <button class="btn btn-ghost" data-upd="notas">Ver notas</button>
           <button class="btn btn-primary" data-upd="aplicar">Atualizar agora</button>
           <button class="btn btn-ghost" data-upd="depois">Depois</button>
         </span>`;
@@ -1150,10 +1149,6 @@
   }
 
   async function acaoUpdate(acao) {
-    if (acao === 'notas' && updateState.at) {
-      window.runtime.BrowserOpenURL(updateState.at.url);
-      return;
-    }
     if (acao === 'depois') {
       bannerEl().className = 'update-banner';
       return;
